@@ -1,6 +1,13 @@
 // Next.js configuration enabling React Compiler
 const nextConfig = {
-  reactCompiler: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "r2.thesportsdb.com",
+      },
+    ],
+  },
 };
 
 export default nextConfig;
