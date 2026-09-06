@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
 
+// Orchestrates global synchronization of teams and match fixtures across all pending league-seasons
 export async function GET() {
   try {
-    // 1. Ensure we have a tracking table so empty seasons don't trap the queue
+    // Ensure table exists to track completed seasons
     await pool.query(`
       CREATE TABLE IF NOT EXISTS Processed_Seasons (
         season_id INT PRIMARY KEY
       );
     `);
 
-    // 2. Find league-seasons that haven't been processed yet
+    // Fetch pending league-seasons awaiting data synchronization
     const query = `
       SELECT l.league_id, l.name AS league_name, s.season_id, s.year 
       FROM League l
@@ -49,7 +50,7 @@ export async function GET() {
       const { league_id, season_id, year } = item;
       const seasonYear = year.split('-')[0];
 
-      // --- A. SYNC TEAMS ---
+      // Fetch and upsert teams for this league-season
       try {
         const teamsRes = await fetch(`https://v3.football.api-sports.io/teams?league=${league_id}&season=${seasonYear}`, {
           method: 'GET',
@@ -81,7 +82,7 @@ export async function GET() {
         console.error(`Team fetch error for league ${league_id}:`, err.message);
       }
 
-      // --- B. SYNC MATCHES ---
+      // Fetch and upsert match fixtures for this league-season
       try {
         const fixturesRes = await fetch(`https://v3.football.api-sports.io/fixtures?league=${league_id}&season=${seasonYear}`, {
           method: 'GET',
@@ -125,8 +126,7 @@ export async function GET() {
         console.error(`Fixture fetch error for league ${league_id}:`, err.message);
       }
 
-      // --- C. MARK SEASON AS PROCESSED ---
-      // This ensures even if a league/season had 0 matches, it will never be checked again and queue decreases.
+      // Mark season as processed
       await pool.query(
         `INSERT INTO Processed_Seasons (season_id) VALUES ($1) ON CONFLICT DO NOTHING`,
         [season_id]

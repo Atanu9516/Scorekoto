@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
 
+// Fetches and upserts teams across top global football leagues for season 2023
 export async function GET() {
   try {
-    // Definitive permanent API-Sports IDs for top global competitions
+    // Top global competitions targeted for synchronization
     const majorLeagues = [
       { id: 39, name: 'Premier League' },
       { id: 140, name: 'La Liga' },
@@ -43,6 +44,7 @@ export async function GET() {
         const t = item.team;
         const venue = item.venue;
 
+        // Upsert team and stadium info
         const query = `
           INSERT INTO Team (Team_ID, Name, Short_Name, Stadium_Name)
           VALUES ($1, $2, $3, $4)

@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
 
+// Synchronizes active player squads (season 2024) for teams in batches of 3
 export async function GET() {
     try {
-        // 1. Automatically create the tracking table if it doesn't exist yet
+        // Track teams that have completed player synchronization
         await pool.query(`
             CREATE TABLE IF NOT EXISTS Processed_Teams_Players (
                 Team_ID INT PRIMARY KEY
             );
         `);
 
-        // 2. Find up to 3 teams that haven't had their players synced yet
+        // Retrieve next batch of pending teams
         const { rows: pendingTeams } = await pool.query(`
             SELECT Team_ID 
             FROM Team 
@@ -18,25 +19,21 @@ export async function GET() {
             LIMIT 3;
         `);
 
-        // If no teams left, the sync is 100% finished!
         if (pendingTeams.length === 0) {
             return NextResponse.json({ success: true, message: "All players synced!", remainingInQueue: 0 });
         }
 
-        // 3. Loop through the batch of teams
         for (const team of pendingTeams) {
-            // Using season 2024 to get the active squad
             const apiUrl = `https://v3.football.api-sports.io/players?team=${team.team_id}&season=2024`;
             
             const response = await fetch(apiUrl, {
                 method: 'GET',
                 headers: {
-                    'x-apisports-key': process.env.API_SPORTS_KEY, // Ensure this matches your .env file
+                    'x-apisports-key': process.env.API_SPORTS_KEY,
                 }
             });
 
             if (!response.ok) {
-                // If we hit a rate limit (429), stop the batch immediately
                 if (response.status === 429) {
                     return NextResponse.json({ success: false, status: 'paused', message: "Rate limit reached." });
                 }
@@ -45,12 +42,12 @@ export async function GET() {
 
             const data = await response.json();
 
-            // 4. Insert each player into your schema
+            // Insert player details into database
             if (data.response && data.response.length > 0) {
                 for (const item of data.response) {
                     const p = item.player;
                     
-                    // Parse weight (API returns "74 kg", schema expects DECIMAL)
+                    // Parse numeric weight from API response (e.g., '74 kg')
                     const weightCm = p.weight ? parseFloat(p.weight.replace(/[^0-9.]/g, '')) : null;
 
                     await pool.query(`
@@ -65,7 +62,7 @@ export async function GET() {
                         p.firstname || 'Unknown', 
                         p.lastname || 'Unknown',
                         item.statistics[0]?.games?.position || null,
-                        null,                     // Market_Value_Euros (API doesn't provide this, so we default to null)
+                        null,
                         weightCm,
                         p.birth?.date || null,
                         p.nationality || null
@@ -73,14 +70,13 @@ export async function GET() {
                 }
             }
 
-            // 5. Mark this team as processed so we never fetch it again
+            // Mark team as completed
             await pool.query(`INSERT INTO Processed_Teams_Players (Team_ID) VALUES ($1) ON CONFLICT DO NOTHING;`, [team.team_id]);
             
-            // Add a 1-second delay between API calls to prevent tripping rate limits
+            // Rate limit delay between team requests
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        // Count how many teams are still left in total
         const { rows: queueCheck } = await pool.query(`
             SELECT COUNT(*) AS remaining 
             FROM Team 

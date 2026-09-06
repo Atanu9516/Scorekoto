@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
 
+// Fetches and upserts fixtures for major global football leagues for season 2023
 export async function GET() {
   try {
+    // Top global competitions targeted for synchronization
     const majorLeagues = [
       { id: 39, name: 'Premier League' },
       { id: 140, name: 'La Liga' },
@@ -47,6 +49,7 @@ export async function GET() {
         const homeScore = goals.home !== null ? goals.home : 0;
         const awayScore = goals.away !== null ? goals.away : 0;
 
+        // Upsert match data and scorelines
         const query = `
           INSERT INTO match (match_id, season_id, home_team_id, away_team_id, match_date, status, home_score, away_score, venue)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -58,7 +61,7 @@ export async function GET() {
         
         const values = [
           fixture.id,
-          seasonYear, // Maps to the 2023 season row we seeded
+          seasonYear,
           teams.home.id,
           teams.away.id,
           fixture.date,

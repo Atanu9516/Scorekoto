@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
 
+// Fetches Premier League 2023 teams from API-Sports and saves new entries to the database
 export async function GET() {
   try {
-    // 1. Fetch the confirmed working Premier League 2023 dataset
     const response = await fetch('https://v3.football.api-sports.io/teams?league=39&season=2023', {
       method: 'GET',
       headers: {
@@ -17,7 +17,7 @@ export async function GET() {
 
     let savedCount = 0;
 
-    // 2. Loop through the JSON array and insert each team
+    // Insert teams into the database, ignoring conflicts on existing Team_IDs
     for (const item of teams) {
       const team = item.team;
       const venue = item.venue;
@@ -29,10 +29,8 @@ export async function GET() {
       `;
       
       const values = [team.id, team.name, team.code, venue.name];
-      
       const result = await pool.query(query, values);
       
-      // result.rowCount tells us if a new row was added (1) or skipped (0)
       if (result.rowCount > 0) {
         savedCount++;
       }

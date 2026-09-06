@@ -1,6 +1,5 @@
-/** @type {import('next').NextConfig} */
+// Next.js configuration enabling React Compiler
 const nextConfig = {
-  /* config options here */
   reactCompiler: true,
 };
 
