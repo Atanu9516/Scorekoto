@@ -101,7 +101,7 @@ export async function POST(request) {
       success: true,
       message: 'Team added to favorites in database',
       team_id: targetTeamId,
-    });
+    }, { status: 201 });
   } catch (error) {
     console.error('Error adding favorite team:', error);
     return NextResponse.json(

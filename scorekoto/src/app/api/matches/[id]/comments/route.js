@@ -91,7 +91,7 @@ export async function POST(request, { params }) {
       success: true,
       message: 'Comment added successfully',
       comment: result.rows[0],
-    });
+    }, { status: 201 });
   } catch (err) {
     console.error('Error posting comment:', err);
     return NextResponse.json(

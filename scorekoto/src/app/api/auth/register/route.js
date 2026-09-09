@@ -85,7 +85,7 @@ export async function POST(request) {
         role: newUser.role || 'user',
         created_at: newUser.created_at,
       },
-    });
+    }, { status: 201 });
 
     // Set secure HTTP-only cookie
     response.cookies.set('scorekoto_token', token, {
