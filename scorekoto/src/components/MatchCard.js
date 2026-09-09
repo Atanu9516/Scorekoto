@@ -4,15 +4,22 @@ import TeamBadge from "./TeamBadge";
 
 export default function MatchCard({ match }) {
     const isLive = match.status === "LIVE";
-    const isFinished = match.status === "FT";
+    const isFinished = match.status === "FT" || match.status === "AET" || match.status === "PEN";
 
-    const homeTeam = teams.find(
-        (team) => team.name === match.homeTeam
-    );
+    const homeFound = teams.find((t) => t.name === match.homeTeam || t.slug === match.homeSlug);
+    const awayFound = teams.find((t) => t.name === match.awayTeam || t.slug === match.awaySlug);
 
-    const awayTeam = teams.find(
-        (team) => team.name === match.awayTeam
-    );
+    const homeTeam = {
+        name: match.homeTeam,
+        logo: match.homeLogo || homeFound?.logo,
+        shortName: homeFound?.shortName,
+    };
+
+    const awayTeam = {
+        name: match.awayTeam,
+        logo: match.awayLogo || awayFound?.logo,
+        shortName: awayFound?.shortName,
+    };
 
     return (
         <Link

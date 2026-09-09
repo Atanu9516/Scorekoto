@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import players from "@/data/players";
+import { getEventsForMatch } from "@/app/lib/events";
 
 export default function MatchTabs({
   match,
@@ -10,6 +11,7 @@ export default function MatchTabs({
 }) {
   const [activeTab, setActiveTab] = useState("summary");
 
+  const events = getEventsForMatch(match, match.events, lineup);
   const stats = match.stats;
 
   return (
@@ -59,11 +61,11 @@ export default function MatchTabs({
         <section className="match-section">
           <h2>Match Events</h2>
 
-          {match.events.length === 0 ? (
-            <p>No events yet.</p>
+          {events.length === 0 ? (
+            <p>No events recorded for this match yet.</p>
           ) : (
             <div className="match-timeline">
-              {match.events.map((event, index) => (
+              {events.map((event, index) => (
                 <MatchEvent
                   key={index}
                   event={event}
@@ -82,11 +84,11 @@ export default function MatchTabs({
         <section className="match-section">
           <h2>Commentary</h2>
 
-          {match.events.length === 0 ? (
-            <p>No commentary available yet.</p>
+          {events.length === 0 ? (
+            <p>No commentary available for this match yet.</p>
           ) : (
             <div className="commentary-list">
-              {match.events.map((event, index) => (
+              {events.map((event, index) => (
                 <div
                   key={index}
                   className="commentary-item"
@@ -331,6 +333,9 @@ function getEventIcon(type) {
     case "substitution":
       return "🔁";
 
+    case "whistle":
+      return "⏱️";
+
     default:
       return "•";
   }
@@ -357,8 +362,11 @@ function getEventTitle(event) {
     case "substitution":
       return "Substitution";
 
+    case "whistle":
+      return event.detail || "Match Whistle";
+
     default:
-      return event.player ?? "Match event";
+      return event.detail || event.player || "Match event";
   }
 }
 
@@ -366,7 +374,7 @@ function getEventTitle(event) {
 function getCommentary(event) {
   switch (event.type) {
     case "goal":
-      return `GOAL! ${event.player} scores for ${event.team}.`;
+      return `GOAL! ${event.player} scores for ${event.team}.${event.assist ? ` (Assisted by ${event.assist})` : ''}`;
 
     case "penalty-goal":
       return `GOAL! ${event.player} converts the penalty for ${event.team}.`;
@@ -375,16 +383,19 @@ function getCommentary(event) {
       return `Own goal by ${event.player}.`;
 
     case "yellow-card":
-      return `${event.player} receives a yellow card for ${event.team}.`;
+      return `${event.player} receives a yellow card for ${event.team}.${event.detail ? ` (${event.detail})` : ''}`;
 
     case "red-card":
-      return `${event.player} receives a red card for ${event.team}.`;
+      return `${event.player} receives a red card for ${event.team}.${event.detail ? ` (${event.detail})` : ''}`;
 
     case "substitution":
-      return `${event.team} make a substitution. ${event.playerIn} replaces ${event.playerOut}.`;
+      return `${event.team} make a substitution: ${event.playerIn || 'Substitute'} replaces ${event.playerOut || event.player}.`;
+
+    case "whistle":
+      return event.detail || `Whistle blown at ${event.minute}.`;
 
     default:
-      return "Match event.";
+      return event.detail || "Match action in progress.";
   }
 }
 

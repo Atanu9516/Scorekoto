@@ -8,7 +8,7 @@ const teams = [
     league: "Premier League",
     stadium: "Anfield",
     founded: 1892,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/40.png",
   },
   {
     id: 2,
@@ -19,7 +19,7 @@ const teams = [
     league: "Premier League",
     stadium: "Emirates Stadium",
     founded: 1886,
-    logo: "https://r2.thesportsdb.com/images/media/team/badge/uyhbfe1612467038.png",
+    logo: "https://media.api-sports.io/football/teams/42.png",
   },
   {
     id: 3,
@@ -30,7 +30,7 @@ const teams = [
     league: "Premier League",
     stadium: "Stamford Bridge",
     founded: 1905,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/49.png",
   },
   {
     id: 4,
@@ -41,7 +41,7 @@ const teams = [
     league: "La Liga",
     stadium: "Spotify Camp Nou",
     founded: 1899,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/529.png",
   },
   {
     id: 5,
@@ -52,7 +52,7 @@ const teams = [
     league: "La Liga",
     stadium: "Estadio Santiago Bernabéu",
     founded: 1902,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/541.png",
   },
   {
     id: 6,
@@ -63,7 +63,7 @@ const teams = [
     league: "La Liga",
     stadium: "Riyadh Air Metropolitano",
     founded: 1903,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/530.png",
   },
   {
     id: 7,
@@ -74,7 +74,7 @@ const teams = [
     league: "Premier League",
     stadium: "Etihad Stadium",
     founded: 1880,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/50.png",
   },
   {
     id: 8,
@@ -85,7 +85,7 @@ const teams = [
     league: "Premier League",
     stadium: "Old Trafford",
     founded: 1878,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/33.png",
   },
   {
     id: 9,
@@ -96,7 +96,7 @@ const teams = [
     league: "Premier League",
     stadium: "Tottenham Hotspur Stadium",
     founded: 1882,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/47.png",
   },
   {
     id: 10,
@@ -107,7 +107,7 @@ const teams = [
     league: "Premier League",
     stadium: "Villa Park",
     founded: 1874,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/66.png",
   },
   {
     id: 11,
@@ -118,7 +118,7 @@ const teams = [
     league: "Premier League",
     stadium: "St James' Park",
     founded: 1892,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/34.png",
   },
   {
     id: 12,
@@ -129,9 +129,8 @@ const teams = [
     league: "Premier League",
     stadium: "Goodison Park",
     founded: 1878,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/45.png",
   },
-
   {
     id: 13,
     name: "Sevilla",
@@ -141,7 +140,7 @@ const teams = [
     league: "La Liga",
     stadium: "Ramón Sánchez-Pizjuán",
     founded: 1890,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/536.png",
   },
   {
     id: 14,
@@ -152,7 +151,7 @@ const teams = [
     league: "La Liga",
     stadium: "Estadio Benito Villamarín",
     founded: 1907,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/543.png",
   },
   {
     id: 15,
@@ -163,9 +162,8 @@ const teams = [
     league: "La Liga",
     stadium: "Mestalla",
     founded: 1919,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/532.png",
   },
-
   {
     id: 16,
     name: "Inter Milan",
@@ -175,7 +173,7 @@ const teams = [
     league: "Serie A",
     stadium: "San Siro",
     founded: 1908,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/505.png",
   },
   {
     id: 17,
@@ -186,7 +184,7 @@ const teams = [
     league: "Serie A",
     stadium: "San Siro",
     founded: 1899,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/489.png",
   },
   {
     id: 18,
@@ -197,7 +195,7 @@ const teams = [
     league: "Serie A",
     stadium: "Allianz Stadium",
     founded: 1897,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/496.png",
   },
   {
     id: 19,
@@ -208,7 +206,7 @@ const teams = [
     league: "Serie A",
     stadium: "Stadio Diego Armando Maradona",
     founded: 1926,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/492.png",
   },
   {
     id: 20,
@@ -219,9 +217,8 @@ const teams = [
     league: "Serie A",
     stadium: "Stadio Olimpico",
     founded: 1927,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/497.png",
   },
-
   {
     id: 21,
     name: "Bayern Munich",
@@ -231,7 +228,7 @@ const teams = [
     league: "Bundesliga",
     stadium: "Allianz Arena",
     founded: 1900,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/157.png",
   },
   {
     id: 22,
@@ -242,7 +239,7 @@ const teams = [
     league: "Bundesliga",
     stadium: "Signal Iduna Park",
     founded: 1909,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/165.png",
   },
   {
     id: 23,
@@ -253,7 +250,7 @@ const teams = [
     league: "Bundesliga",
     stadium: "Red Bull Arena",
     founded: 2009,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/173.png",
   },
   {
     id: 24,
@@ -264,9 +261,8 @@ const teams = [
     league: "Bundesliga",
     stadium: "BayArena",
     founded: 1904,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/168.png",
   },
-
   {
     id: 25,
     name: "Paris Saint-Germain",
@@ -276,7 +272,7 @@ const teams = [
     league: "Ligue 1",
     stadium: "Parc des Princes",
     founded: 1970,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/85.png",
   },
   {
     id: 26,
@@ -287,7 +283,7 @@ const teams = [
     league: "Ligue 1",
     stadium: "Groupama Stadium",
     founded: 1950,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/80.png",
   },
   {
     id: 27,
@@ -298,7 +294,7 @@ const teams = [
     league: "Ligue 1",
     stadium: "Stade Vélodrome",
     founded: 1899,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/81.png",
   },
   {
     id: 28,
@@ -309,9 +305,8 @@ const teams = [
     league: "Ligue 1",
     stadium: "Stade Louis II",
     founded: 1924,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/91.png",
   },
-
   {
     id: 29,
     name: "Ajax",
@@ -321,7 +316,7 @@ const teams = [
     league: "Eredivisie",
     stadium: "Johan Cruyff Arena",
     founded: 1900,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/194.png",
   },
   {
     id: 30,
@@ -332,7 +327,7 @@ const teams = [
     league: "Eredivisie",
     stadium: "Philips Stadion",
     founded: 1913,
-    logo: null,
+    logo: "https://media.api-sports.io/football/teams/197.png",
   },
 ];
 
