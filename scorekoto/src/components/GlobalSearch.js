@@ -1,280 +1,223 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-
-import players from "@/data/players";
-import teams from "@/data/teams";
-import leagues from "@/data/leagues";
-import matches from "@/data/matches";
-
 
 export default function GlobalSearch() {
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState({ teams: [], players: [], leagues: [], matches: [] });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const searchRef = useRef(null);
 
-  const searchText = query.trim().toLowerCase();
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults({ teams: [], players: [], leagues: [], matches: [] });
+      setIsLoading(false);
+      return;
+    }
 
+    setIsLoading(true);
+    const handler = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=5`);
+        if (res.ok) {
+          const data = await res.json();
+          setResults(data.results || { teams: [], players: [], leagues: [], matches: [] });
+        }
+      } catch (err) {
+        console.error("Global search error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 250);
 
-  const matchedPlayers = players
-    .filter((player) =>
-      player.name.toLowerCase().includes(searchText)
-    )
-    .slice(0, 5);
+    return () => clearTimeout(handler);
+  }, [query]);
 
-
-  const matchedTeams = teams
-    .filter((team) =>
-      team.name.toLowerCase().includes(searchText)
-    )
-    .slice(0, 5);
-
-
-  const matchedLeagues = leagues
-    .filter((league) =>
-      league.name.toLowerCase().includes(searchText)
-    )
-    .slice(0, 5);
-
-
-  const matchedMatches = matches
-    .filter((match) => {
-      const matchName =
-        `${match.homeTeam} ${match.awayTeam} ${match.league}`.toLowerCase();
-
-      return matchName.includes(searchText);
-    })
-    .slice(0, 5);
-
+  // Handle clicking outside to close results dropdown
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const hasResults =
-    matchedPlayers.length > 0 ||
-    matchedTeams.length > 0 ||
-    matchedLeagues.length > 0 ||
-    matchedMatches.length > 0;
-
+    (results.players?.length || 0) > 0 ||
+    (results.teams?.length || 0) > 0 ||
+    (results.leagues?.length || 0) > 0 ||
+    (results.matches?.length || 0) > 0;
 
   function clearSearch() {
     setQuery("");
+    setResults({ teams: [], players: [], leagues: [], matches: [] });
+    setIsOpen(false);
   }
 
-
   return (
-    <div className="global-search">
-
+    <div className="global-search" ref={searchRef}>
       <div className="search-input-wrapper">
-
-        <span className="search-icon">
-          🔍︎
-        </span>
-
+        <span className="search-icon">🔍︎</span>
         <input
           type="text"
-          placeholder="Search teams, players, leagues..."
+          placeholder="Search teams, players, leagues, matches..."
           value={query}
-          onChange={(event) =>
-            setQuery(event.target.value)
-          }
+          onFocus={() => setIsOpen(true)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setIsOpen(true);
+          }}
         />
-
         {query && (
           <button
             type="button"
             className="search-clear"
             onClick={clearSearch}
+            aria-label="Clear search"
           >
             ×
           </button>
         )}
-
       </div>
 
-
-      {searchText && (
+      {isOpen && query.trim().length > 0 && (
         <div className="search-results">
+          {isLoading && (
+            <div className="search-empty">Searching Scorekoto database...</div>
+          )}
 
-          {!hasResults && (
+          {!isLoading && !hasResults && (
             <div className="search-empty">
-              No results found for "{query}"
+              No results found for &quot;{query}&quot;
             </div>
           )}
 
-
-          {matchedPlayers.length > 0 && (
+          {!isLoading && results.players?.length > 0 && (
             <SearchSection title="Players">
-
-              {matchedPlayers.map((player) => (
+              {results.players.map((player) => (
                 <Link
                   key={player.id}
-                  href={`/players/${player.slug}`}
+                  href={`/players/${player.slug || player.id}`}
                   className="search-result-item"
                   onClick={clearSearch}
                 >
-
                   <div className="search-result-icon">
-                    {player.number}
+                    {player.photo ? (
+                      <img src={player.photo} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
+                    ) : (
+                      "🏃"
+                    )}
                   </div>
-
                   <div className="search-result-details">
                     <strong>{player.name}</strong>
-
                     <span>
-                      {player.team} · {player.position}
+                      {player.team_name || player.nationality || "Player"} · {player.position || "Footballer"}
                     </span>
                   </div>
-
-                  <span className="search-result-arrow">
-                    ›
-                  </span>
-
+                  <span className="search-result-arrow">›</span>
                 </Link>
               ))}
-
             </SearchSection>
           )}
 
-
-          {matchedTeams.length > 0 && (
+          {!isLoading && results.teams?.length > 0 && (
             <SearchSection title="Teams">
-
-              {matchedTeams.map((team) => (
+              {results.teams.map((team) => (
                 <Link
                   key={team.id}
-                  href={`/teams/${team.slug}`}
+                  href={`/teams/${team.slug || team.id}`}
                   className="search-result-item"
                   onClick={clearSearch}
                 >
-
                   <div className="search-result-icon">
-                    {team.logo ? (
-                      <img
-                        src={team.logo}
-                        alt=""
-                      />
+                    {team.logo_url ? (
+                      <img src={team.logo_url} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} />
                     ) : (
                       team.name.charAt(0)
                     )}
                   </div>
-
                   <div className="search-result-details">
                     <strong>{team.name}</strong>
-
                     <span>
-                      {team.country} · {team.league}
+                      {team.short_name || "Club"} {team.stadium_name ? `· ${team.stadium_name}` : ""}
                     </span>
                   </div>
-
-                  <span className="search-result-arrow">
-                    ›
-                  </span>
-
+                  <span className="search-result-arrow">›</span>
                 </Link>
               ))}
-
             </SearchSection>
           )}
 
-
-          {matchedLeagues.length > 0 && (
+          {!isLoading && results.leagues?.length > 0 && (
             <SearchSection title="Competitions">
-
-              {matchedLeagues.map((league) => (
+              {results.leagues.map((league) => (
                 <Link
-                  key={league.slug}
-                  href={`/leagues/${league.slug}`}
+                  key={league.id}
+                  href={`/leagues/${league.slug || league.id}`}
                   className="search-result-item"
                   onClick={clearSearch}
                 >
-
                   <div className="search-result-icon">
-                    🏆
+                    {league.logo_url ? (
+                      <img src={league.logo_url} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} />
+                    ) : (
+                      "🏆"
+                    )}
                   </div>
-
                   <div className="search-result-details">
                     <strong>{league.name}</strong>
-
-                    <span>
-                      {league.country} · {league.season}
-                    </span>
+                    <span>{league.country || "International"}</span>
                   </div>
-
-                  <span className="search-result-arrow">
-                    ›
-                  </span>
-
+                  <span className="search-result-arrow">›</span>
                 </Link>
               ))}
-
             </SearchSection>
           )}
 
-
-          {matchedMatches.length > 0 && (
+          {!isLoading && results.matches?.length > 0 && (
             <SearchSection title="Matches">
-
-              {matchedMatches.map((match) => (
+              {results.matches.map((match) => (
                 <Link
                   key={match.id}
                   href={`/matches/${match.id}`}
                   className="search-result-item"
                   onClick={clearSearch}
                 >
-
-                  <div className="search-result-icon">
-                    ⚽
-                  </div>
-
+                  <div className="search-result-icon">⚽</div>
                   <div className="search-result-details">
                     <strong>
                       {match.homeTeam} vs {match.awayTeam}
                     </strong>
-
                     <span>
-                      {match.league} ·{" "}
-                      {getMatchStatus(match)}
+                      {match.league || "Match"} ·{" "}
+                      {match.status === "LIVE"
+                        ? `LIVE ${match.homeScore} - ${match.awayScore}`
+                        : match.status === "FT"
+                        ? `FT ${match.homeScore} - ${match.awayScore}`
+                        : match.status || "Upcoming"}
                     </span>
                   </div>
-
-                  <span className="search-result-arrow">
-                    ›
-                  </span>
-
+                  <span className="search-result-arrow">›</span>
                 </Link>
               ))}
-
             </SearchSection>
           )}
-
         </div>
       )}
-
     </div>
   );
 }
-
 
 function SearchSection({ title, children }) {
   return (
     <div className="search-section">
-
-      <div className="search-section-title">
-        {title}
-      </div>
-
+      <div className="search-section-title">{title}</div>
       {children}
-
     </div>
   );
-}
-
-
-function getMatchStatus(match) {
-  if (match.status === "LIVE") {
-    return `Live ${match.minute}`;
-  }
-
-  if (match.status === "FT") {
-    return `${match.homeScore} - ${match.awayScore}`;
-  }
-
-  return match.minute;
 }

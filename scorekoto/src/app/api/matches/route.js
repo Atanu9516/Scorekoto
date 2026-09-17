@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
-import fallbackMatches from '@/data/matches';
 
 // In-memory cache for live matches to prevent burning API quota on rapid reloads
 let liveCache = {
@@ -187,65 +186,139 @@ export async function GET(request) {
     // 2. Fetch live matches (filtered strictly by stored leagues)
     const liveResult = await fetchLiveMatchesFromApi(storedLeagues, forceRefresh);
 
-    // 3. Fetch finished/previous matches for the stored leagues from PostgreSQL database
-    let dbMatches = [];
+    // 3. Query PostgreSQL for matches (Primary source of truth for admin updates)
+    let dbFinishedMatches = [];
+    let dbLiveMatches = [];
+    let dbUpcomingMatches = [];
+
     try {
-      const matchQuery = `
+      const leagueIdsArray = Array.from(storedLeagues.ids);
+
+      // Base select
+      const baseSelect = `
         SELECT 
           m.match_id as id,
           m.status,
           m.match_date as "matchDate",
           m.home_score as "homeScore",
           m.away_score as "awayScore",
-          ht.name as "homeTeam",
+          m.home_possession as "homePossession",
+          m.away_possession as "awayPossession",
+          COALESCE(ht.name, 'Home Team') as "homeTeam",
           ht.logo_url as "homeLogo",
-          at.name as "awayTeam",
+          COALESCE(at.name, 'Away Team') as "awayTeam",
           at.logo_url as "awayLogo",
           COALESCE(l.name, 'Premier League') as league
         FROM match m
-        JOIN team ht ON m.home_team_id = ht.team_id
-        JOIN team at ON m.away_team_id = at.team_id
-        JOIN season s ON m.season_id = s.season_id
-        JOIN league l ON s.league_id = l.league_id
-        WHERE m.status IN ('FT', 'AET', 'PEN')
-          AND l.league_id = ANY($1::int[])
-        ORDER BY m.match_date DESC
-        LIMIT 50;
+        LEFT JOIN team ht ON m.home_team_id = ht.team_id
+        LEFT JOIN team at ON m.away_team_id = at.team_id
+        LEFT JOIN season s ON m.season_id = s.season_id
+        LEFT JOIN league l ON s.league_id = l.league_id
       `;
-      const leagueIdsArray = Array.from(storedLeagues.ids);
-      const result = await pool.query(matchQuery, [leagueIdsArray]);
 
-      dbMatches = result.rows.map((row) => ({
+      // 3a. Finished Matches
+      const finishedQuery = `
+        ${baseSelect}
+        WHERE m.status IN ('FT', 'AET', 'PEN')
+          AND (l.league_id = ANY($1::int[]) OR l.league_id IS NULL)
+        ORDER BY m.match_date DESC
+        LIMIT 60;
+      `;
+      const finishedRes = await pool.query(finishedQuery, [leagueIdsArray]);
+      dbFinishedMatches = finishedRes.rows.map((row) => ({
         id: row.id,
-        date: dateParam === 'tomorrow' ? 'tomorrow' : dateParam === 'yesterday' ? 'yesterday' : 'today',
+        date: dateParam,
         homeTeam: row.homeTeam,
         awayTeam: row.awayTeam,
         homeLogo: row.homeLogo,
         awayLogo: row.awayLogo,
-        homeScore: row.homeScore,
-        awayScore: row.awayScore,
-        status: row.status,
+        homeScore: row.homeScore ?? 0,
+        awayScore: row.awayScore ?? 0,
+        status: row.status || 'FT',
         minute: '',
+        league: row.league,
+        events: [],
+        stats: null,
+      }));
+
+      // 3b. Live Matches in PostgreSQL (e.g. set by Admin in Admin Console)
+      const liveDbQuery = `
+        ${baseSelect}
+        WHERE m.status = 'LIVE'
+        ORDER BY m.match_date DESC
+        LIMIT 20;
+      `;
+      const liveDbRes = await pool.query(liveDbQuery);
+      dbLiveMatches = liveDbRes.rows.map((row) => ({
+        id: row.id,
+        date: 'today',
+        homeTeam: row.homeTeam,
+        awayTeam: row.awayTeam,
+        homeLogo: row.homeLogo,
+        awayLogo: row.awayLogo,
+        homeScore: row.homeScore ?? 0,
+        awayScore: row.awayScore ?? 0,
+        status: 'LIVE',
+        minute: "65'",
+        league: row.league,
+        events: [],
+        stats: null,
+      }));
+
+      // 3c. Upcoming Matches in PostgreSQL
+      const upcomingQuery = `
+        ${baseSelect}
+        WHERE m.status IN ('NS', 'UPCOMING', 'TBD', 'TIMED', 'POSTPONED')
+        ORDER BY m.match_date ASC
+        LIMIT 30;
+      `;
+      const upcomingRes = await pool.query(upcomingQuery);
+      dbUpcomingMatches = upcomingRes.rows.map((row) => ({
+        id: row.id,
+        date: 'tomorrow',
+        homeTeam: row.homeTeam,
+        awayTeam: row.awayTeam,
+        homeLogo: row.homeLogo,
+        awayLogo: row.awayLogo,
+        homeScore: null,
+        awayScore: null,
+        status: 'UPCOMING',
+        minute: 'TBD',
         league: row.league,
         events: [],
         stats: null,
       }));
     } catch (dbErr) {
       console.error('Failed to query matches from DB:', dbErr);
-      dbMatches = fallbackMatches;
     }
 
-    if (dbMatches.length === 0) {
-      dbMatches = fallbackMatches;
+    // Merge API live matches with DB live matches (DB takes precedence on matching ID)
+    const combinedLiveMatches = [...dbLiveMatches];
+    for (const apiMatch of liveResult.matches) {
+      if (!combinedLiveMatches.some((m) => m.id === apiMatch.id)) {
+        combinedLiveMatches.push(apiMatch);
+      }
+    }
+
+    // Prepare response based on selected date
+    let finalFinished = dbFinishedMatches;
+    let finalLive = combinedLiveMatches;
+    let finalUpcoming = dbUpcomingMatches;
+
+    if (dateParam === 'yesterday') {
+      finalLive = [];
+      finalUpcoming = [];
+    } else if (dateParam === 'tomorrow') {
+      finalLive = [];
     }
 
     return NextResponse.json({
       success: true,
-      liveMatches: liveResult.matches,
+      liveMatches: finalLive,
       apiLimitHit: liveResult.apiLimitHit,
       apiMessage: liveResult.message,
-      finishedMatches: dbMatches,
-      upcomingMatches: [],
+      finishedMatches: finalFinished,
+      upcomingMatches: finalUpcoming,
     });
   } catch (err) {
     console.error('Error in matches API:', err);
@@ -254,7 +327,7 @@ export async function GET(request) {
       liveMatches: [],
       apiLimitHit: false,
       apiMessage: '',
-      finishedMatches: fallbackMatches,
+      finishedMatches: [],
       upcomingMatches: [],
     });
   }

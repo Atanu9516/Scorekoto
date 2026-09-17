@@ -5,7 +5,7 @@ import { comparePassword, generateToken } from '../../../lib/auth';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { identifier, password, role: requestedRole, asAdmin } = body;
+    const { identifier, password } = body;
 
     if (!identifier || !identifier.trim() || !password) {
       return NextResponse.json(
@@ -16,9 +16,9 @@ export async function POST(request) {
 
     const cleanIdentifier = identifier.trim();
 
-    // Query user by username or email including role
+    // Query user by username or email
     const query = `
-      SELECT user_id, username, email, password_hash, role, created_at
+      SELECT user_id, username, email, role, password_hash, created_at
       FROM users
       WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)
       LIMIT 1;
@@ -33,7 +33,6 @@ export async function POST(request) {
     }
 
     const user = result.rows[0];
-    const userRole = user.role || 'user';
 
     // Verify password
     const isMatch = await comparePassword(password, user.password_hash);
@@ -44,15 +43,9 @@ export async function POST(request) {
       );
     }
 
-    // If logging in through Admin Portal, enforce admin role check
-    if ((requestedRole === 'admin' || asAdmin === true) && userRole !== 'admin') {
-      return NextResponse.json(
-        { error: 'Access Denied: This account does not have administrator privileges.' },
-        { status: 403 }
-      );
-    }
+    const userRole = user.role || 'user';
 
-    // Generate JWT token with role
+    // Generate JWT token
     const token = generateToken({
       userId: user.user_id,
       username: user.username,
@@ -70,7 +63,7 @@ export async function POST(request) {
 
     const response = NextResponse.json({
       success: true,
-      message: userRole === 'admin' ? 'Admin authenticated successfully' : 'Logged in successfully',
+      message: 'Logged in successfully',
       user: userPayload,
     });
 

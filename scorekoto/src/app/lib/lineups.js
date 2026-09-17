@@ -1,5 +1,4 @@
 import pool from './db';
-import fallbackLineups from '@/data/lineups';
 
 // Helper to build a starting XI and substitutes from player rows
 function buildFormationFromPlayers(teamName, managerName, players) {
@@ -223,13 +222,7 @@ export async function getLineupForMatch(match, apiLineups = null) {
     if (mapped) return mapped;
   }
 
-  // 2. Check static fallback lineups
-  const staticLineup = fallbackLineups.find((l) => l.matchId === match.id);
-  if (staticLineup) {
-    return staticLineup;
-  }
-
-  // 3. Build dynamic lineup from PostgreSQL squad records
+  // 2. Build dynamic lineup from PostgreSQL squad records
   const homeSquad = await getTeamSquadFromDb(match.homeTeam);
   const awaySquad = await getTeamSquadFromDb(match.awayTeam);
 

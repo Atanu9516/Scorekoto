@@ -32,21 +32,40 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    let isMounted = true;
+    async function initAuth() {
+      try {
+        const res = await fetch("/api/auth/me", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) setUser(data.user || null);
+        } else {
+          if (isMounted) setUser(null);
+        }
+      } catch (err) {
+        console.error("Auth check failed:", err);
+        if (isMounted) setUser(null);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    initAuth();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-  // Login handler with role support
-  const login = async (identifier, password, role = 'user') => {
+  // Login handler
+  const login = async (identifier, password) => {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          identifier, 
-          password, 
-          role,
-          asAdmin: role === 'admin' 
-        }),
+        body: JSON.stringify({ identifier, password }),
       });
 
       const data = await res.json();

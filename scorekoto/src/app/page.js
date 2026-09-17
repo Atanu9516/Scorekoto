@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import DateSelector from "@/components/DateSelector";
-import fallbackMatches from "@/data/matches";
 import LeagueMatchGroup from "@/components/LeagueMatchGroup";
 import NewsSidebar from "@/components/NewsSidebar";
 
@@ -41,13 +40,9 @@ export default function Home() {
       }
     } catch (err) {
       console.error("Failed to fetch matches:", err);
-      // Fallback to local data
-      const dateMatches = fallbackMatches.filter(
-        (match) => match.date === selectedDate
-      );
-      setLiveMatches(dateMatches.filter((m) => m.status === "LIVE"));
-      setFinishedMatches(dateMatches.filter((m) => m.status === "FT"));
-      setUpcomingMatches(dateMatches.filter((m) => m.status === "UPCOMING"));
+      setLiveMatches([]);
+      setFinishedMatches([]);
+      setUpcomingMatches([]);
     } finally {
       setLoading(false);
       setIsRefreshing(false);

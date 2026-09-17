@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import fallbackTeams from "@/data/teams";
 import MatchTabs from "@/components/MatchTabs";
 import MatchReactions from "@/components/MatchReactions";
 
@@ -66,10 +65,8 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
     return () => clearInterval(interval);
   }, [isLive, refreshMatchData]);
 
-  const homeFound = fallbackTeams.find((t) => t.name === match.homeTeam || t.slug === match.homeSlug);
-  const awayFound = fallbackTeams.find((t) => t.name === match.awayTeam || t.slug === match.awaySlug);
-  const homeLogo = match.homeLogo || homeFound?.logo;
-  const awayLogo = match.awayLogo || awayFound?.logo;
+  const homeLogo = match.homeLogo;
+  const awayLogo = match.awayLogo;
 
   return (
     <main className="match-page">
@@ -121,12 +118,19 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
                 src={homeLogo}
                 alt={`${match.homeTeam} logo`}
                 className="match-scoreboard-logo"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const fallback = e.currentTarget.parentElement?.querySelector(".match-scoreboard-placeholder");
+                  if (fallback) fallback.style.display = "flex";
+                }}
               />
-            ) : (
-              <div className="match-scoreboard-placeholder">
-                {match.homeTeam?.charAt(0) || "H"}
-              </div>
-            )}
+            ) : null}
+            <div
+              className="match-scoreboard-placeholder"
+              style={{ display: homeLogo ? "none" : "flex" }}
+            >
+              {match.homeTeam?.charAt(0) || "H"}
+            </div>
             <h2>{match.homeTeam}</h2>
             <strong>{match.homeScore ?? "-"}</strong>
           </div>
@@ -140,12 +144,19 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
                 src={awayLogo}
                 alt={`${match.awayTeam} logo`}
                 className="match-scoreboard-logo"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const fallback = e.currentTarget.parentElement?.querySelector(".match-scoreboard-placeholder");
+                  if (fallback) fallback.style.display = "flex";
+                }}
               />
-            ) : (
-              <div className="match-scoreboard-placeholder">
-                {match.awayTeam?.charAt(0) || "A"}
-              </div>
-            )}
+            ) : null}
+            <div
+              className="match-scoreboard-placeholder"
+              style={{ display: awayLogo ? "none" : "flex" }}
+            >
+              {match.awayTeam?.charAt(0) || "A"}
+            </div>
             <h2>{match.awayTeam}</h2>
             <strong>{match.awayScore ?? "-"}</strong>
           </div>

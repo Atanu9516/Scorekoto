@@ -260,11 +260,15 @@ export default function LeagueTabs({
 
                                     <div className="scorer-player">
                                         <strong>{scorer.player}</strong>
-                                        <span>{scorer.team}</span>
+                                        <span>
+                                            {scorer.team}
+                                            {scorer.appearances ? ` · ${scorer.appearances} apps` : ""}
+                                            {scorer.assists ? ` · ${scorer.assists} assists` : ""}
+                                        </span>
                                     </div>
 
                                     <strong className="scorer-goals">
-                                        {scorer.goals}
+                                        {scorer.goals} {scorer.goals === 1 ? "goal" : "goals"}
                                     </strong>
                                 </div>
                             ))}
@@ -330,15 +334,35 @@ function LeagueMatchRow({ match }) {
             href={`/matches/${match.id}`}
             className="league-match"
         >
-            <span>{match.homeTeam}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {match.homeLogo && (
+                    <img
+                        src={match.homeLogo}
+                        alt=""
+                        style={{ width: "22px", height: "22px", objectFit: "contain" }}
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                )}
+                {match.homeTeam}
+            </span>
 
             <strong>
-                {match.status === "UPCOMING"
-                    ? match.minute
-                    : `${match.homeScore ?? "-"} - ${match.awayScore ?? "-"}`}
+                {match.status === "UPCOMING" || match.status === "NS"
+                    ? (match.minute || "VS")
+                    : `${match.homeScore ?? 0} - ${match.awayScore ?? 0}`}
             </strong>
 
-            <span>{match.awayTeam}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "flex-end" }}>
+                {match.awayTeam}
+                {match.awayLogo && (
+                    <img
+                        src={match.awayLogo}
+                        alt=""
+                        style={{ width: "22px", height: "22px", objectFit: "contain" }}
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                )}
+            </span>
         </Link>
     );
 }
@@ -360,9 +384,19 @@ function StandingsTable({ standings }) {
                     className="standing-row league-standing-row"
                 >
                     <span>{team.position}</span>
-                    <span>{team.team}</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        {team.logo && (
+                            <img
+                                src={team.logo}
+                                alt=""
+                                style={{ width: "22px", height: "22px", objectFit: "contain" }}
+                                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                            />
+                        )}
+                        <strong>{team.team}</strong>
+                    </span>
                     <span>{team.played}</span>
-                    <span>{team.goalDifference}</span>
+                    <span>{team.goalDifference > 0 ? `+${team.goalDifference}` : team.goalDifference}</span>
                     <strong>{team.points}</strong>
                 </div>
             ))}

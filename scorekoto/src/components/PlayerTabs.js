@@ -4,13 +4,23 @@ import { useState } from "react";
 import Link from "next/link";
 
 export default function PlayerTabs({
-    player,
-    team,
-    playerMatches,
+    player = {},
+    team = null,
+    playerMatches = [],
+    matches = [],
 }) {
     const [activeTab, setActiveTab] = useState("overview");
 
-    const stats = player.stats;
+    const matchItems = Array.isArray(playerMatches) && playerMatches.length > 0 ? playerMatches : (Array.isArray(matches) ? matches : []);
+    const stats = player?.stats || {
+        appearances: 0,
+        goals: 0,
+        assists: 0,
+        rating: "0.0",
+        starts: 0,
+        minutesPlayed: 0,
+        cleanSheets: 0,
+    };
 
     return (
         <>
@@ -80,34 +90,40 @@ export default function PlayerTabs({
                     <section className="player-section">
                         <h2>Current Club</h2>
 
-                        <Link
-                            href={`/teams/${player.team
-                                .toLowerCase()
-                                .replaceAll(" ", "-")}`}
-                            className="player-club-card"
-                        >
-                            {team?.logo ? (
-                                <img
-                                    src={team.logo}
-                                    alt={`${team.name} logo`}
-                                    className="player-club-logo"
-                                />
-                            ) : (
-                                <div className="player-club-placeholder">
-                                    ⚽
-                                </div>
-                            )}
-
-                            <div>
-                                <strong>{player.team}</strong>
-
-                                {team && (
-                                    <span>
-                                        {team.country} · {team.league}
-                                    </span>
+                        {player?.team ? (
+                            <Link
+                                href={`/teams/${player.team
+                                    .toLowerCase()
+                                    .replaceAll(" ", "-")}`}
+                                className="player-club-card"
+                            >
+                                {team?.logo ? (
+                                    <img
+                                        src={team.logo}
+                                        alt={`${team.name} logo`}
+                                        className="player-club-logo"
+                                    />
+                                ) : (
+                                    <div className="player-club-placeholder">
+                                        ⚽
+                                    </div>
                                 )}
-                            </div>
-                        </Link>
+
+                                <div>
+                                    <strong>{player.team}</strong>
+
+                                    {team && (
+                                        <span>
+                                            {team.country} · {team.league}
+                                        </span>
+                                    )}
+                                </div>
+                            </Link>
+                        ) : (
+                            <p style={{ color: "var(--muted)", fontSize: "14px" }}>
+                                Free Agent / Unassigned
+                            </p>
+                        )}
                     </section>
 
                     <section className="player-section">
@@ -143,10 +159,10 @@ export default function PlayerTabs({
                 <section className="player-section">
                     <h2>Matches</h2>
 
-                    {playerMatches.length === 0 ? (
+                    {matchItems.length === 0 ? (
                         <p>No matches found.</p>
                     ) : (
-                        playerMatches.map((match) => (
+                        matchItems.map((match) => (
                             <Link
                                 key={match.id}
                                 href={`/matches/${match.id}`}

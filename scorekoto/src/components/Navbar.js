@@ -35,6 +35,12 @@ export default function Navbar() {
           Favorites
         </Link>
 
+        {user && (
+          <Link href="/profile" className="nav-profile-link">
+            👤 Profile
+          </Link>
+        )}
+
         {user?.role === "admin" && (
           <Link href="/admin" className="nav-admin-link">
             🛡️ Admin Panel
@@ -45,9 +51,9 @@ export default function Navbar() {
           {!loading && (
             user ? (
               <div className="nav-user-info">
-                <span className="nav-user-badge">
+                <Link href="/profile" className="nav-user-badge" title="Go to My Profile">
                   {user.role === "admin" ? "🛡️" : "👤"} {user.username}
-                </span>
+                </Link>
                 <button
                   onClick={logout}
                   className="nav-logout-btn"

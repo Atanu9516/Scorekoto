@@ -59,7 +59,7 @@ export default function TeamsPage() {
           <p>Loading clubs from database...</p>
         </div>
       ) : filteredTeams.length === 0 ? (
-        <p className="empty-message">No teams found matching "{search}".</p>
+        <p className="empty-message">No teams found matching &quot;{search}&quot;.</p>
       ) : (
         <div className="teams-grid">
           {filteredTeams.map((team) => (
@@ -73,12 +73,19 @@ export default function TeamsPage() {
                     src={team.logo_url}
                     alt={`${team.name} badge`}
                     className="team-card-logo"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      const placeholder = e.currentTarget.parentElement?.querySelector(".team-card-placeholder");
+                      if (placeholder) placeholder.style.display = "flex";
+                    }}
                   />
-                ) : (
-                  <div className="team-card-placeholder">
-                    {team.short_name || team.name.charAt(0)}
-                  </div>
-                )}
+                ) : null}
+                <div
+                  className="team-card-placeholder"
+                  style={{ display: team.logo_url ? "none" : "flex" }}
+                >
+                  {team.short_name || team.name.charAt(0)}
+                </div>
 
                 <div className="team-card-info">
                   <strong>{team.name}</strong>

@@ -9,13 +9,12 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, user } = useAuth();
 
-  const [loginRole, setLoginRole] = useState("user"); // "user" | "admin"
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // If already logged in, redirect inside useEffect
+  // If already logged in, redirect based on role
   useEffect(() => {
     if (user) {
       if (user.role === "admin") {
@@ -36,11 +35,11 @@ export default function LoginPage() {
     }
 
     setIsSubmitting(true);
-    const result = await login(identifier, password, loginRole);
+    const result = await login(identifier, password);
     setIsSubmitting(false);
 
     if (result.success) {
-      if (result.user?.role === "admin" || loginRole === "admin") {
+      if (result.user?.role === "admin") {
         router.push("/admin");
       } else {
         router.push("/");
@@ -54,39 +53,11 @@ export default function LoginPage() {
   return (
     <main className="auth-page-container">
       <div className="auth-card">
-        {/* Role Selector Tabs */}
-        <div className="auth-role-tabs">
-          <button
-            type="button"
-            className={`auth-role-tab ${loginRole === "user" ? "active" : ""}`}
-            onClick={() => {
-              setLoginRole("user");
-              setError("");
-            }}
-          >
-            👤 User Login
-          </button>
-          <button
-            type="button"
-            className={`auth-role-tab ${loginRole === "admin" ? "active" : ""}`}
-            onClick={() => {
-              setLoginRole("admin");
-              setError("");
-            }}
-          >
-            🛡️ Admin Login
-          </button>
-        </div>
-
         <div className="auth-header">
-          <div className="auth-logo-badge">
-            {loginRole === "admin" ? "🛡️" : "⚽"}
-          </div>
-          <h1>{loginRole === "admin" ? "Admin Database Portal" : "Welcome Back"}</h1>
+          <div className="auth-logo-badge">⚽</div>
+          <h1>Welcome Back</h1>
           <p>
-            {loginRole === "admin"
-              ? "Sign in with administrator credentials to manage matches, teams, and players in PostgreSQL."
-              : "Log in to access your favorite teams, post reactions, and follow live matches."}
+            Log in to manage your profile, followed teams, players, and match reactions.
           </p>
         </div>
 
@@ -98,13 +69,11 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="auth-field">
-            <label htmlFor="identifier">
-              {loginRole === "admin" ? "Admin Username / Email" : "Username or Email"}
-            </label>
+            <label htmlFor="identifier">Username or Email</label>
             <input
               id="identifier"
               type="text"
-              placeholder={loginRole === "admin" ? "Enter admin username or email" : "Enter your username or email"}
+              placeholder="Enter your username or email"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               required
@@ -127,19 +96,15 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className={`auth-submit-btn ${loginRole === "admin" ? "admin-btn" : ""}`}
+            className="auth-submit-btn"
           >
-            {isSubmitting
-              ? "Authenticating..."
-              : loginRole === "admin"
-              ? "🛡️ Sign In to Admin Panel"
-              : "Log In"}
+            {isSubmitting ? "Authenticating..." : "Log In"}
           </button>
         </form>
 
         <div className="auth-footer">
           <p>
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/register" className="auth-switch-link">
               Create an account
             </Link>

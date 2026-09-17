@@ -23,6 +23,43 @@ export async function GET() {
     const resultsSummary = [];
 
     for (const league of majorLeagues) {
+      // 1. Resolve real season_id for league and seasonYear to satisfy foreign key constraint
+      let seasonId = null;
+      try {
+        const seasonRes = await pool.query(
+          `SELECT season_id FROM season 
+           WHERE league_id = $1 AND (year LIKE $2 OR year LIKE $3) 
+           ORDER BY season_id DESC LIMIT 1`,
+          [league.id, `${seasonYear}%`, `%${seasonYear}%`]
+        );
+        if (seasonRes.rows.length > 0) {
+          seasonId = seasonRes.rows[0].season_id;
+        } else {
+          // Check if league exists before creating a season
+          const leagueCheck = await pool.query(`SELECT league_id FROM league WHERE league_id = $1`, [league.id]);
+          if (leagueCheck.rows.length === 0) {
+            await pool.query(
+              `INSERT INTO league (league_id, name, country, type) VALUES ($1, $2, 'Global', 'League') ON CONFLICT DO NOTHING`,
+              [league.id, league.name]
+            );
+          }
+          const insertSeason = await pool.query(
+            `INSERT INTO season (league_id, year, start_date, end_date)
+             VALUES ($1, $2, $3, $4)
+             RETURNING season_id`,
+            [league.id, `${seasonYear}-${seasonYear + 1}`, `${seasonYear}-08-01`, `${seasonYear + 1}-05-31`]
+          );
+          seasonId = insertSeason.rows[0]?.season_id;
+        }
+      } catch (seasonErr) {
+        console.warn(`Could not resolve season for ${league.name}:`, seasonErr.message);
+      }
+
+      if (!seasonId) {
+        resultsSummary.push({ league: league.name, matchesAdded: 0, status: 'No season found in DB' });
+        continue;
+      }
+
       const response = await fetch(`https://v3.football.api-sports.io/fixtures?league=${league.id}&season=${seasonYear}`, {
         method: 'GET',
         headers: {
@@ -49,6 +86,21 @@ export async function GET() {
         const homeScore = goals.home !== null ? goals.home : 0;
         const awayScore = goals.away !== null ? goals.away : 0;
 
+        // Ensure teams exist to avoid foreign key errors
+        await pool.query(
+          `INSERT INTO team (team_id, name, logo_url)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (team_id) DO NOTHING`,
+          [teams.home.id, teams.home.name, teams.home.logo]
+        ).catch(() => {});
+
+        await pool.query(
+          `INSERT INTO team (team_id, name, logo_url)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (team_id) DO NOTHING`,
+          [teams.away.id, teams.away.name, teams.away.logo]
+        ).catch(() => {});
+
         // Upsert match data and scorelines
         const query = `
           INSERT INTO match (match_id, season_id, home_team_id, away_team_id, match_date, status, home_score, away_score, venue)
@@ -61,7 +113,7 @@ export async function GET() {
         
         const values = [
           fixture.id,
-          seasonYear,
+          seasonId,
           teams.home.id,
           teams.away.id,
           fixture.date,

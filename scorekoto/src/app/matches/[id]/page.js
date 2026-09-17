@@ -1,6 +1,4 @@
 import pool from "@/app/lib/db";
-import fallbackMatches from "@/data/matches";
-import fallbackTeams from "@/data/teams";
 import { getLineupForMatch } from "@/app/lib/lineups";
 import MatchDetailClient from "@/components/MatchDetailClient";
 import Link from "next/link";
@@ -15,16 +13,18 @@ async function getMatchFromDb(matchId) {
         m.match_date as "matchDate",
         m.home_score as "homeScore",
         m.away_score as "awayScore",
+        m.home_possession as "homePossession",
+        m.away_possession as "awayPossession",
         m.venue,
-        ht.name as "homeTeam",
+        COALESCE(ht.name, 'Home Team') as "homeTeam",
         ht.logo_url as "homeLogo",
         ht.stadium_name as "stadium",
-        at.name as "awayTeam",
+        COALESCE(at.name, 'Away Team') as "awayTeam",
         at.logo_url as "awayLogo",
         COALESCE(l.name, 'Football League') as league
       FROM match m
-      JOIN team ht ON m.home_team_id = ht.team_id
-      JOIN team at ON m.away_team_id = at.team_id
+      LEFT JOIN team ht ON m.home_team_id = ht.team_id
+      LEFT JOIN team at ON m.away_team_id = at.team_id
       LEFT JOIN season s ON m.season_id = s.season_id
       LEFT JOIN league l ON s.league_id = l.league_id
       WHERE m.match_id = $1
@@ -37,6 +37,9 @@ async function getMatchFromDb(matchId) {
     }
 
     const row = result.rows[0];
+
+    const homePoss = row.homePossession !== null && row.homePossession !== undefined ? Number(row.homePossession) : 52;
+    const awayPoss = row.awayPossession !== null && row.awayPossession !== undefined ? Number(row.awayPossession) : (100 - homePoss);
 
     return {
       id: row.id,
@@ -53,7 +56,7 @@ async function getMatchFromDb(matchId) {
       matchDate: row.matchDate,
       events: [],
       stats: {
-        possession: [52, 48],
+        possession: [homePoss, awayPoss],
         shots: [11, 8],
         shotsOnTarget: [5, 3],
         corners: [6, 4],
@@ -332,18 +335,13 @@ export default async function MatchPage({ params }) {
   let match = null;
 
   if (matchId && !isNaN(matchId)) {
-    // 1. Try online API-Sports first for official lineups, commentary, and subs
-    match = await getMatchFromApiSports(matchId);
+    // 1. Check PostgreSQL database FIRST! (Guarantees Admin updates are preserved)
+    match = await getMatchFromDb(matchId);
 
-    // 2. Fallback to PostgreSQL database
+    // 2. Fallback to online API-Sports only if match does not exist in DB
     if (!match) {
-      match = await getMatchFromDb(matchId);
+      match = await getMatchFromApiSports(matchId);
     }
-  }
-
-  // 3. Try fallback static matches
-  if (!match) {
-    match = fallbackMatches.find((item) => item.id === matchId);
   }
 
   if (!match) {

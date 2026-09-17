@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import players from "@/data/players";
 import { getEventsForMatch } from "@/app/lib/events";
 
 export default function MatchTabs({
@@ -510,31 +509,17 @@ function SubstituteList({ lineup }) {
       <h3>{lineup.team} Substitutes</h3>
 
       {lineup.substitutes.map((player) => {
-        const playerData = players.find(
-          (item) => item.name === player.name
-        );
-
-        if (playerData) {
-          return (
-            <Link
-              key={player.name}
-              href={`/players/${playerData.slug}`}
-              className="substitute-player substitute-player-link"
-            >
-              <span>#{player.number}</span>
-              <strong>{player.name}</strong>
-            </Link>
-          );
-        }
+        const playerSlug = player.id || encodeURIComponent(player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
 
         return (
-          <div
+          <Link
             key={player.name}
-            className="substitute-player"
+            href={`/players/${playerSlug}`}
+            className="substitute-player substitute-player-link"
           >
             <span>#{player.number}</span>
             <strong>{player.name}</strong>
-          </div>
+          </Link>
         );
       })}
     </div>
@@ -542,9 +527,7 @@ function SubstituteList({ lineup }) {
 }
 
 function PitchPlayer({ player }) {
-  const playerData = players.find(
-    (item) => item.name === player.name
-  );
+  const playerSlug = player.id || encodeURIComponent(player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
 
   const content = (
     <>
@@ -562,20 +545,12 @@ function PitchPlayer({ player }) {
     </>
   );
 
-  if (playerData) {
-    return (
-      <Link
-        href={`/players/${playerData.slug}`}
-        className="pitch-player pitch-player-link"
-      >
-        {content}
-      </Link>
-    );
-  }
-
   return (
-    <div className="pitch-player">
+    <Link
+      href={`/players/${playerSlug}`}
+      className="pitch-player pitch-player-link"
+    >
       {content}
-    </div>
+    </Link>
   );
 }

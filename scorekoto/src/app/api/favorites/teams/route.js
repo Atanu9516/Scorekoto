@@ -11,6 +11,7 @@ async function resolveTeamId(teamIdentifier) {
     const res = await pool.query('SELECT team_id FROM team WHERE team_id = $1 LIMIT 1', [Number(teamIdentifier)]);
     if (res.rows.length > 0) return res.rows[0].team_id;
   }
+  
 
   // If name or slug
   const normalized = String(teamIdentifier).trim().toLowerCase();
@@ -101,7 +102,7 @@ export async function POST(request) {
       success: true,
       message: 'Team added to favorites in database',
       team_id: targetTeamId,
-    }, { status: 201 });
+    });
   } catch (error) {
     console.error('Error adding favorite team:', error);
     return NextResponse.json(
@@ -165,7 +166,7 @@ export async function DELETE(request) {
     await pool.query(deleteQuery, [user.user_id, targetTeamId]);
 
     return NextResponse.json({
-      success: true,
+      success: true, 
       message: 'Team removed from favorites in database',
       team_id: targetTeamId,
     });

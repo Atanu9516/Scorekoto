@@ -1,9 +1,7 @@
 import pool from "@/app/lib/db";
-import fallbackTeams from "@/data/teams";
-import fallbackMatches from "@/data/matches";
-import fallbackPlayers from "@/data/players";
 import TeamTabs from "@/components/TeamTabs";
 import FavoriteButton from "@/components/FavoriteButton";
+import Link from "next/link";
 
 async function getTeamDataFromDb(teamParam) {
   try {
@@ -83,7 +81,9 @@ async function getTeamDataFromDb(teamParam) {
         m.home_score as "homeScore",
         m.away_score as "awayScore",
         ht.name as "homeTeam",
+        ht.logo_url as "homeLogo",
         at.name as "awayTeam",
+        at.logo_url as "awayLogo",
         COALESCE(l.name, 'League') as league
       FROM match m
       JOIN team ht ON m.home_team_id = ht.team_id
@@ -97,7 +97,7 @@ async function getTeamDataFromDb(teamParam) {
     const matchesRes = await pool.query(matchesQuery, [teamId]);
     const matches = matchesRes.rows;
 
-    // 5. Calculate Stats
+    // 5. Calculate Real Stats from Completed Matches
     const completedMatches = matches.filter(
       (m) => m.status === "FT" || m.status === "AET" || m.status === "PEN"
     );
@@ -154,80 +154,40 @@ async function getTeamDataFromDb(teamParam) {
 export default async function TeamPage({ params }) {
   const { team: teamParam } = await params;
 
-  // 1. Try fetching from PostgreSQL database
+  // 1. Fetch from PostgreSQL database
   const dbData = await getTeamDataFromDb(teamParam);
 
-  let teamData;
-  let teamMatches;
-  let teamPlayers;
-  let teamStats;
-
-  if (dbData) {
-    teamData = dbData.team;
-    teamMatches = dbData.matches;
-    teamPlayers = dbData.players;
-    teamStats = dbData.stats;
-  } else {
-    // 2. Fallback to mock data if not in DB
-    const decoded = decodeURIComponent(teamParam).toLowerCase();
-    teamData = fallbackTeams.find(
-      (item) =>
-        item.slug === decoded ||
-        item.name.toLowerCase().replaceAll(" ", "-") === decoded ||
-        String(item.id) === decoded
-    );
-
-    if (!teamData) {
-      return (
-        <main className="team-page">
-          <h1>Team not found</h1>
-        </main>
-      );
-    }
-
-    teamMatches = fallbackMatches.filter(
-      (match) =>
-        match.homeTeam === teamData.name || match.awayTeam === teamData.name
-    );
-
-    const completedMatches = teamMatches.filter(
-      (match) => match.status !== "UPCOMING"
-    );
-
-    teamPlayers = fallbackPlayers.filter(
-      (player) => player.team === teamData.name
-    );
-
-    teamStats = completedMatches.reduce(
-      (stats, match) => {
-        const isHomeTeam = match.homeTeam === teamData.name;
-        const goalsFor = isHomeTeam ? match.homeScore : match.awayScore;
-        const goalsAgainst = isHomeTeam ? match.awayScore : match.homeScore;
-
-        stats.played += 1;
-        stats.goalsFor += goalsFor ?? 0;
-        stats.goalsAgainst += goalsAgainst ?? 0;
-
-        if (goalsFor > goalsAgainst) {
-          stats.wins += 1;
-        } else if (goalsFor === goalsAgainst) {
-          stats.draws += 1;
-        } else {
-          stats.losses += 1;
-        }
-
-        return stats;
-      },
-      {
-        played: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-      }
+  if (!dbData || !dbData.team) {
+    return (
+      <main className="team-page">
+        <div style={{ textAlign: "center", padding: "60px 20px" }}>
+          <h2>Team Not Found</h2>
+          <p style={{ color: "var(--muted)", margin: "10px 0 20px" }}>
+            The requested team could not be located in the database.
+          </p>
+          <Link
+            href="/teams"
+            style={{
+              display: "inline-block",
+              padding: "10px 20px",
+              borderRadius: "999px",
+              background: "var(--mint)",
+              color: "var(--black)",
+              fontWeight: "700",
+              textDecoration: "none",
+            }}
+          >
+            ← Browse Teams
+          </Link>
+        </div>
+      </main>
     );
   }
+
+  const teamData = dbData.team;
+  const teamMatches = dbData.matches || [];
+  const teamPlayers = dbData.players || [];
+  const teamStats = dbData.stats || { played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 };
 
   return (
     <main className="team-page">
@@ -246,19 +206,24 @@ export default async function TeamPage({ params }) {
         <div>
           <h1>{teamData.name}</h1>
           <p>
-            {teamData.country} · {teamData.league}
+            {teamData.country} · {teamData.stadium}
           </p>
         </div>
 
-        <FavoriteButton type="teams" id={teamData.slug || teamData.id} />
+        <FavoriteButton
+          type="teams"
+          id={teamData.slug || String(teamData.id)}
+        />
       </section>
 
-      {/* TEAM CONTENT */}
       <TeamTabs
         team={teamData}
         teamMatches={teamMatches}
-        teamStats={teamStats}
+        matches={teamMatches}
         teamPlayers={teamPlayers}
+        players={teamPlayers}
+        teamStats={teamStats}
+        stats={teamStats}
       />
     </main>
   );

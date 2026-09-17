@@ -35,22 +35,40 @@ export async function getUserFromRequest(request) {
   try {
     let token = null;
 
-    // Check cookie
-    const cookieHeader = request.headers.get('cookie') || '';
-    const cookies = Object.fromEntries(
-      cookieHeader.split(';').map(c => {
-        const [key, ...v] = c.trim().split('=');
-        return [key, decodeURIComponent(v.join('='))];
-      })
-    );
-
-    if (cookies.scorekoto_token) {
-      token = cookies.scorekoto_token;
+    // 1. Check NextRequest cookies
+    if (request?.cookies && typeof request.cookies.get === 'function') {
+      const cookieObj = request.cookies.get('scorekoto_token');
+      if (cookieObj) {
+        token = typeof cookieObj === 'string' ? cookieObj : cookieObj.value;
+      }
     }
 
-    // Check Authorization header fallback
-    if (!token) {
-      const authHeader = request.headers.get('authorization');
+    // 2. Check cookie header fallback
+    if (!token && request?.headers) {
+      const cookieHeader = request.headers.get ? request.headers.get('cookie') : request.headers.cookie;
+      if (cookieHeader) {
+        const parts = cookieHeader.split(';');
+        for (const part of parts) {
+          const eqIdx = part.indexOf('=');
+          if (eqIdx !== -1) {
+            const k = part.substring(0, eqIdx).trim();
+            const v = part.substring(eqIdx + 1).trim();
+            if (k === 'scorekoto_token') {
+              try {
+                token = decodeURIComponent(v);
+              } catch {
+                token = v;
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Check Authorization header fallback
+    if (!token && request?.headers) {
+      const authHeader = request.headers.get ? request.headers.get('authorization') : request.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.substring(7);
       }
