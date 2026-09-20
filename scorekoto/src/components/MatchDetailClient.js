@@ -15,9 +15,10 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
   const [feedbackMsg, setFeedbackMsg] = useState("");
 
   const matchId = match?.id;
-  const isLive = match?.status === "LIVE";
-  const isFinished = match?.status === "FT" || match?.status === "AET" || match?.status === "PEN";
-  const isUpcoming = match?.status === "UPCOMING";
+  const matchStatus = (match?.status || "").toUpperCase();
+  const isLive = ["LIVE", "1H", "2H", "HT", "ET", "BT", "P", "IN_PLAY"].includes(matchStatus);
+  const isFinished = ["FT", "AET", "PEN"].includes(matchStatus);
+  const isUpcoming = ["NS", "TBD", "TIMED", "UPCOMING"].includes(matchStatus);
 
   const refreshMatchData = useCallback(async (manual = true) => {
     if (!matchId) return;
@@ -56,14 +57,37 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
     }
   }, [matchId]);
 
-  // Optional background sync every 30s for live matches
+  // Background live sync every 20s for live matches
   useEffect(() => {
     if (!isLive) return;
     const interval = setInterval(() => {
       refreshMatchData(false);
-    }, 30000);
+    }, 20000);
     return () => clearInterval(interval);
   }, [isLive, refreshMatchData]);
+
+  // Local live minute increment ticker every 60s for in-play matches
+  useEffect(() => {
+    if (!isLive) return;
+    const minuteStr = match?.minute || "";
+    if (minuteStr.includes("HT") || minuteStr.includes("FT") || minuteStr.includes("TBD")) return;
+
+    const currentMin = parseInt(minuteStr.replace(/[^0-9]/g, ""), 10);
+    if (!currentMin || isNaN(currentMin)) return;
+
+    const ticker = setInterval(() => {
+      setMatch((prev) => {
+        const cur = parseInt((prev?.minute || "").replace(/[^0-9]/g, ""), 10);
+        if (!cur || isNaN(cur) || cur >= 120) return prev;
+        return {
+          ...prev,
+          minute: `${cur + 1}'`,
+        };
+      });
+    }, 60000);
+
+    return () => clearInterval(ticker);
+  }, [isLive, match?.status]);
 
   const homeLogo = match.homeLogo;
   const awayLogo = match.awayLogo;

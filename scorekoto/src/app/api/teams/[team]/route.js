@@ -88,17 +88,18 @@ export async function GET(request, { params }) {
         ht.logo_url as "homeLogo",
         at.name as "awayTeam",
         at.logo_url as "awayLogo",
-        COALESCE(l.name, 'League') as league
+        COALESCE(l.name, 'Football League') as league
       FROM match m
-      JOIN team ht ON m.home_team_id = ht.team_id
-      JOIN team at ON m.away_team_id = at.team_id
+      LEFT JOIN team ht ON m.home_team_id = ht.team_id
+      LEFT JOIN team at ON m.away_team_id = at.team_id
       LEFT JOIN season s ON m.season_id = s.season_id
       LEFT JOIN league l ON s.league_id = l.league_id
       WHERE m.home_team_id = $1 OR m.away_team_id = $1
+         OR LOWER(ht.name) = LOWER($2) OR LOWER(at.name) = LOWER($2)
       ORDER BY m.match_date DESC
       LIMIT 100;
     `;
-    const matchesRes = await pool.query(matchesQuery, [teamId]);
+    const matchesRes = await pool.query(matchesQuery, [teamId, teamData.name]);
     const matches = matchesRes.rows;
 
     // 4. Calculate Stats from completed matches

@@ -2,6 +2,34 @@ import { NextResponse } from 'next/server';
 import pool from '../../../lib/db';
 import { getLineupForMatch } from '@/app/lib/lineups';
 
+function isFinishedStatus(status) {
+  if (!status) return false;
+  const s = String(status).toUpperCase();
+  return ['FT', 'AET', 'PEN'].includes(s);
+}
+
+function isLiveStatus(status) {
+  if (!status) return false;
+  const s = String(status).toUpperCase();
+  return ['LIVE', '1H', '2H', 'HT', 'ET', 'BT', 'P', 'IN_PLAY'].includes(s);
+}
+
+function calculateElapsedMinute(matchDate, status) {
+  const s = String(status || '').toUpperCase();
+  if (s === 'HT') return 'HT';
+  if (isFinishedStatus(s)) return 'FT';
+  if (!matchDate) return 'LIVE';
+
+  const start = new Date(matchDate).getTime();
+  const now = Date.now();
+  const diffMinutes = Math.floor((now - start) / (60 * 1000));
+  if (diffMinutes < 0) return 'TBD';
+  if (diffMinutes <= 45) return `${Math.max(1, diffMinutes)}'`;
+  if (diffMinutes <= 60) return 'HT';
+  if (diffMinutes <= 105) return `${diffMinutes - 15}'`;
+  return "90+'";
+}
+
 export async function GET(request, { params }) {
   try {
     const { id: matchIdParam } = await params;
@@ -11,7 +39,10 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: 'Valid match ID is required' }, { status: 400 });
     }
 
-    // 1. Check PostgreSQL database FIRST (Source of truth for admin updates)
+    const { searchParams } = new URL(request.url);
+    const forceRefresh = searchParams.get('forceRefresh') === 'true';
+
+    // 1. Check PostgreSQL database
     const query = `
       SELECT 
         m.match_id as id,
@@ -37,72 +68,30 @@ export async function GET(request, { params }) {
       LIMIT 1;
     `;
     const result = await pool.query(query, [matchId]);
+    const dbRow = result.rows.length > 0 ? result.rows[0] : null;
 
-    if (result.rows.length > 0) {
-      const row = result.rows[0];
-      const homePoss = row.homePossession !== null && row.homePossession !== undefined ? Number(row.homePossession) : 52;
-      const awayPoss = row.awayPossession !== null && row.awayPossession !== undefined ? Number(row.awayPossession) : (100 - homePoss);
+    const isDbFinished = dbRow ? isFinishedStatus(dbRow.status) : false;
+    const shouldFetchApi = !dbRow || forceRefresh || !isDbFinished;
 
-      const formattedMatch = {
-        id: row.id,
-        homeTeam: row.homeTeam,
-        awayTeam: row.awayTeam,
-        homeLogo: row.homeLogo,
-        awayLogo: row.awayLogo,
-        homeScore: row.homeScore ?? 0,
-        awayScore: row.awayScore ?? 0,
-        status: row.status || 'FT',
-        minute: row.status === 'LIVE' ? "65'" : '',
-        league: row.league,
-        venue: row.venue || row.stadium,
-        matchDate: row.matchDate,
-        events: [],
-        stats: {
-          possession: [homePoss, awayPoss],
-          shots: [11, 8],
-          shotsOnTarget: [5, 3],
-          corners: [6, 4],
-          fouls: [10, 12],
-          offsides: [2, 1],
-          yellowCards: [1, 2],
-          redCards: [0, 0],
-        },
-      };
-
-      const lineupData = await getLineupForMatch(formattedMatch);
-
-      return NextResponse.json({
-        success: true,
-        match: formattedMatch,
-        lineup: lineupData,
-      });
-    }
-
-    // 2. Fallback to API-Sports if match is not in PostgreSQL database
-    const { searchParams } = new URL(request.url);
-    const forceRefresh = searchParams.get('forceRefresh') === 'true';
+    // 2. Fetch fresh live data from API-Sports if live, forceRefresh requested, or match not in DB
     const apiKey = process.env.API_SPORTS_KEY;
-    if (apiKey) {
+    if (shouldFetchApi && apiKey) {
       try {
         const liveRes = await fetch(`https://v3.football.api-sports.io/fixtures?id=${matchId}`, {
           headers: { 'x-apisports-key': apiKey, Accept: 'application/json' },
           cache: forceRefresh ? 'no-store' : 'default',
-          next: { revalidate: forceRefresh ? 0 : 30 },
+          next: { revalidate: forceRefresh ? 0 : 20 },
         });
 
-        if (!liveRes.ok) {
-          console.warn(`API-Sports HTTP ${liveRes.status} in single match API.`);
-        } else {
+        if (liveRes.ok) {
           const liveData = await liveRes.json();
 
-          if (liveData.errors && Object.keys(liveData.errors).length > 0) {
-            const errMsg = Object.values(liveData.errors).join(', ');
-            console.warn('API-Sports notice in single match API:', errMsg);
-          } else if (liveData.response && Array.isArray(liveData.response) && liveData.response.length > 0) {
+          if (liveData.response && Array.isArray(liveData.response) && liveData.response.length > 0) {
             const item = liveData.response[0];
-            const statusShort = item.fixture?.status?.short;
-            const isFinished = statusShort === 'FT' || statusShort === 'AET' || statusShort === 'PEN';
-            const isUpcoming = statusShort === 'NS' || statusShort === 'TBD';
+            const statusShort = item.fixture?.status?.short || '';
+            const isFinished = isFinishedStatus(statusShort);
+            const isUpcoming = ['NS', 'TBD', 'TIMED'].includes(statusShort);
+            const isLive = isLiveStatus(statusShort);
 
             let stats = null;
             if (item.statistics && item.statistics.length >= 2) {
@@ -154,40 +143,69 @@ export async function GET(request, { params }) {
               };
             }
 
+            const homeScore = item.goals?.home ?? (isUpcoming ? null : 0);
+            const awayScore = item.goals?.away ?? (isUpcoming ? null : 0);
+            const resolvedStatus = isFinished ? 'FT' : isUpcoming ? 'UPCOMING' : 'LIVE';
+
             const formattedMatch = {
               id: item.fixture.id,
-              homeTeam: item.teams.home.name,
-              awayTeam: item.teams.away.name,
-              homeLogo: item.teams.home.logo,
-              awayLogo: item.teams.away.logo,
-              homeScore: item.goals.home ?? (isUpcoming ? null : 0),
-              awayScore: item.goals.away ?? (isUpcoming ? null : 0),
-              status: isFinished ? 'FT' : isUpcoming ? 'UPCOMING' : 'LIVE',
+              homeTeam: item.teams?.home?.name || dbRow?.homeTeam || 'Home Team',
+              awayTeam: item.teams?.away?.name || dbRow?.awayTeam || 'Away Team',
+              homeLogo: item.teams?.home?.logo || dbRow?.homeLogo || null,
+              awayLogo: item.teams?.away?.logo || dbRow?.awayLogo || null,
+              homeScore: homeScore,
+              awayScore: awayScore,
+              status: resolvedStatus,
               minute:
                 statusShort === 'HT'
                   ? 'HT'
-                  : item.fixture.status.elapsed
+                  : item.fixture?.status?.elapsed
                   ? `${item.fixture.status.elapsed}'`
                   : isUpcoming
                   ? 'TBD'
+                  : isFinished
+                  ? 'FT'
                   : 'LIVE',
-              league: item.league.name || 'Football League',
-              venue: item.fixture.venue?.name || 'Stadium',
-              matchDate: item.fixture.date,
+              league: item.league?.name || dbRow?.league || 'Football League',
+              venue: item.fixture?.venue?.name || dbRow?.venue || 'Stadium',
+              matchDate: item.fixture?.date || dbRow?.matchDate,
               rawLineups: item.lineups || null,
-              events: (item.events || []).map((e) => ({
-                minute: `${e.time.elapsed}'`,
-                type: e.type.toLowerCase().includes('goal')
+              events: (item.events || []).map((e) => {
+                const typeLower = (e.type || '').toLowerCase();
+                const detailLower = (e.detail || '').toLowerCase();
+                const isGoal = typeLower.includes('goal');
+                const isCard = typeLower.includes('card');
+                const isSub = typeLower.includes('sub');
+                const isYellow = isCard && detailLower.includes('yellow');
+                const isRed = isCard && (detailLower.includes('red') || detailLower.includes('second yellow'));
+                const isOwn = isGoal && detailLower.includes('own');
+                const isPen = isGoal && detailLower.includes('penalty');
+
+                const eventType = isOwn
+                  ? 'own-goal'
+                  : isPen
+                  ? 'penalty-goal'
+                  : isGoal
                   ? 'goal'
-                  : e.type.toLowerCase().includes('card')
-                  ? e.detail?.toLowerCase().includes('yellow')
-                    ? 'yellow-card'
-                    : 'red-card'
-                  : 'substitution',
-                player: e.player?.name || 'Player',
-                team: e.team?.name || '',
-                assist: e.assist?.name || null,
-              })),
+                  : isYellow
+                  ? 'yellow-card'
+                  : isRed
+                  ? 'red-card'
+                  : isSub
+                  ? 'substitution'
+                  : 'event';
+
+                return {
+                  minute: e.time?.extra ? `${e.time.elapsed}+${e.time.extra}'` : `${e.time?.elapsed || 0}'`,
+                  type: eventType,
+                  player: e.player?.name?.trim() || '',
+                  team: e.team?.name?.trim() || '',
+                  assist: isSub ? null : (e.assist?.name?.trim() || null),
+                  playerIn: isSub ? (e.assist?.name?.trim() || null) : null,
+                  playerOut: isSub ? (e.player?.name?.trim() || null) : null,
+                  detail: e.detail || '',
+                };
+              }),
               stats: stats || {
                 possession: [50, 50],
                 shots: [8, 6],
@@ -200,6 +218,33 @@ export async function GET(request, { params }) {
               },
             };
 
+            // Update scoreline & status in database
+            if (dbRow) {
+              try {
+                await pool.query(
+                  `UPDATE match SET 
+                     home_score = COALESCE($1, home_score), 
+                     away_score = COALESCE($2, away_score), 
+                     status = $3,
+                     home_possession = COALESCE($4, home_possession),
+                     away_possession = COALESCE($5, away_possession)
+                   WHERE match_id = $6`,
+                  [
+                    homeScore,
+                    awayScore,
+                    resolvedStatus,
+                    stats?.possession?.[0] ?? null,
+                    stats?.possession?.[1] ?? null,
+                    matchId,
+                  ]
+                );
+              } catch (uErr) {
+                console.warn('Could not update live match score in DB:', uErr.message);
+              }
+            } else if (isFinished) {
+              await saveFinishedMatchToDb(formattedMatch, item);
+            }
+
             const lineupData = await getLineupForMatch(formattedMatch, item.lineups);
             return NextResponse.json({
               success: true,
@@ -208,9 +253,54 @@ export async function GET(request, { params }) {
             });
           }
         }
-      } catch (e) {
-        console.error('API-Sports single fixture error:', e);
+      } catch (apiErr) {
+        console.warn('API-Sports single fixture lookup error:', apiErr.message);
       }
+    }
+
+    // 3. Fallback: Return match from PostgreSQL database
+    if (dbRow) {
+      const homePoss = dbRow.homePossession !== null && dbRow.homePossession !== undefined ? Number(dbRow.homePossession) : 52;
+      const awayPoss = dbRow.awayPossession !== null && dbRow.awayPossession !== undefined ? Number(dbRow.awayPossession) : (100 - homePoss);
+      const isLiveDb = isLiveStatus(dbRow.status);
+
+      const formattedMatch = {
+        id: dbRow.id,
+        homeTeam: dbRow.homeTeam,
+        awayTeam: dbRow.awayTeam,
+        homeLogo: dbRow.homeLogo,
+        awayLogo: dbRow.awayLogo,
+        homeScore: dbRow.homeScore ?? 0,
+        awayScore: dbRow.awayScore ?? 0,
+        status: dbRow.status || 'FT',
+        minute: isLiveDb
+          ? calculateElapsedMinute(dbRow.matchDate, dbRow.status)
+          : dbRow.status === 'HT'
+          ? 'HT'
+          : '',
+        league: dbRow.league,
+        venue: dbRow.venue || dbRow.stadium,
+        matchDate: dbRow.matchDate,
+        events: [],
+        stats: {
+          possession: [homePoss, awayPoss],
+          shots: [11, 8],
+          shotsOnTarget: [5, 3],
+          corners: [6, 4],
+          fouls: [10, 12],
+          offsides: [2, 1],
+          yellowCards: [1, 2],
+          redCards: [0, 0],
+        },
+      };
+
+      const lineupData = await getLineupForMatch(formattedMatch);
+
+      return NextResponse.json({
+        success: true,
+        match: formattedMatch,
+        lineup: lineupData,
+      });
     }
 
     return NextResponse.json({ error: 'Match not found' }, { status: 404 });
@@ -253,13 +343,42 @@ async function saveFinishedMatchToDb(formattedMatch, rawItem) {
     const matchDate = formattedMatch.matchDate || new Date();
     const status = formattedMatch.status || 'FT';
 
-    const homeTeamId = rawItem?.teams?.home?.id || matchId * 10 + 1;
-    const awayTeamId = rawItem?.teams?.away?.id || matchId * 10 + 2;
+    let homeTeamId = rawItem?.teams?.home?.id;
+    const dbHomeRes = await pool.query(
+      `SELECT team_id FROM team WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [homeTeamName]
+    );
+    if (dbHomeRes.rows.length > 0) {
+      homeTeamId = dbHomeRes.rows[0].team_id;
+    } else if (!homeTeamId) {
+      homeTeamId = matchId * 10 + 1;
+    }
+
+    let awayTeamId = rawItem?.teams?.away?.id;
+    const dbAwayRes = await pool.query(
+      `SELECT team_id FROM team WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [awayTeamName]
+    );
+    if (dbAwayRes.rows.length > 0) {
+      awayTeamId = dbAwayRes.rows[0].team_id;
+    } else if (!awayTeamId) {
+      awayTeamId = matchId * 10 + 2;
+    }
 
     let seasonId = 1;
-    const seasonRes = await pool.query('SELECT season_id FROM season LIMIT 1');
-    if (seasonRes.rows.length > 0) {
-      seasonId = seasonRes.rows[0].season_id;
+    const rawLeagueId = rawItem?.league?.id;
+    if (rawLeagueId) {
+      const sRes = await pool.query(
+        `SELECT season_id FROM season WHERE league_id = $1 ORDER BY season_id DESC LIMIT 1`,
+        [rawLeagueId]
+      );
+      if (sRes.rows.length > 0) seasonId = sRes.rows[0].season_id;
+    }
+    if (seasonId === 1) {
+      const seasonRes = await pool.query('SELECT season_id FROM season LIMIT 1');
+      if (seasonRes.rows.length > 0) {
+        seasonId = seasonRes.rows[0].season_id;
+      }
     }
 
     // 1. Ensure home team in DB

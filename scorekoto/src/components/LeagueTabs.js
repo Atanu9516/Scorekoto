@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 
 export default function LeagueTabs({
     league,
@@ -10,8 +11,16 @@ export default function LeagueTabs({
     standings,
     topScorers,
     leagueStats,
+    availableSeasons = [],
+    selectedSeason = "",
 }) {
+    const router = useRouter();
+    const pathname = usePathname();
     const [activeTab, setActiveTab] = useState("overview");
+
+    const handleSeasonChange = (newSeason) => {
+        router.push(`${pathname}?season=${newSeason}`);
+    };
 
     const upcomingMatches = leagueMatches.filter(
         (match) => match.status === "UPCOMING"
@@ -194,10 +203,37 @@ export default function LeagueTabs({
             {/* STANDINGS */}
             {activeTab === "standings" && (
                 <section className="league-section">
-                    <h2>Standings</h2>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                        <h2>Standings</h2>
+                        {availableSeasons && availableSeasons.length > 0 && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <label style={{ color: "var(--muted)", fontSize: "14px", fontWeight: "600" }}>Season:</label>
+                                <select
+                                    value={selectedSeason}
+                                    onChange={(e) => handleSeasonChange(e.target.value)}
+                                    style={{
+                                        background: "var(--surface, #1e293b)",
+                                        color: "var(--text, #fff)",
+                                        border: "1px solid var(--border, #334155)",
+                                        borderRadius: "8px",
+                                        padding: "6px 12px",
+                                        fontSize: "14px",
+                                        fontWeight: "600",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    {availableSeasons.map((s) => (
+                                        <option key={s.id || s.year} value={s.year}>
+                                            {s.year.includes('-') ? s.year.replace('-', '/') : s.year}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                    </div>
 
                     {standings.length === 0 ? (
-                        <p>No standings available yet.</p>
+                        <p>No standings available yet for season {selectedSeason ? (selectedSeason.includes('-') ? selectedSeason.replace('-', '/') : selectedSeason) : ''}.</p>
                     ) : (
                         <StandingsTable standings={standings} />
                     )}

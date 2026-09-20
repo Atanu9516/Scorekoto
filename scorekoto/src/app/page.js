@@ -53,6 +53,24 @@ export default function Home() {
     loadMatches(false);
   }, [loadMatches]);
 
+  // Live match polling every 25s when viewing today
+  useEffect(() => {
+    if (selectedDate !== "today") return;
+    const interval = setInterval(() => {
+      // Quiet background refresh without full-page spinner
+      fetch(`/api/matches?date=today&t=${Date.now()}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.liveMatches) setLiveMatches(data.liveMatches);
+          if (data.finishedMatches) setFinishedMatches(data.finishedMatches);
+          if (data.upcomingMatches) setUpcomingMatches(data.upcomingMatches);
+          setLastUpdated(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+        })
+        .catch(() => {});
+    }, 25000);
+    return () => clearInterval(interval);
+  }, [selectedDate]);
+
   const groupByLeague = (matchList) => {
     return matchList.reduce((groups, match) => {
       const league = match.league || "Other Matches";
@@ -105,52 +123,41 @@ export default function Home() {
               <span className="banner-icon">ℹ️</span>
               <p>
                 {apiMessage ||
-                  "Live match API quota limit reached. Please browse previous matches from our database below."}
+                  "Live match API quota limit reached. Displaying fixtures and matches from our PostgreSQL database."}
               </p>
             </div>
           )}
 
-          {/* ALL MATCHES LOADING STATE - Ensures all live matches are completely ready before display */}
+          {/* ALL MATCHES LOADING STATE */}
           {loading ? (
             <div className="matches-loading-container">
               <div className="matches-loading-spinner"></div>
-              <h3>⚡ Loading Live Matches & Database Fixtures...</h3>
+              <h3>⚡ Loading Matches & Fixtures...</h3>
               <p>Retrieving real-time match events, minutes, and league standings</p>
             </div>
           ) : (
             <>
-              {/* LIVE MATCHES */}
-              <h2>🔴 Live</h2>
-              {Object.entries(liveByLeague).map(([league, leagueMatches]) => (
-                <LeagueMatchGroup
-                  key={league}
-                  league={league}
-                  matches={leagueMatches}
-                />
-              ))}
-
-              {liveMatches.length === 0 && (
-                <p className="empty-message">No live matches at the moment</p>
-              )}
-
-              {/* FINISHED MATCHES */}
-              <h2>Finished Matches</h2>
-              {Object.entries(finishedByLeague).map(([league, leagueMatches]) => (
-                <LeagueMatchGroup
-                  key={league}
-                  league={league}
-                  matches={leagueMatches}
-                />
-              ))}
-
-              {finishedMatches.length === 0 && (
-                <p className="empty-message">No finished matches</p>
-              )}
-
-              {/* UPCOMING MATCHES */}
-              {upcomingMatches.length > 0 && (
+              {/* YESTERDAY VIEW */}
+              {selectedDate === "yesterday" && (
                 <>
-                  <h2>Upcoming Matches</h2>
+                  <h2>Yesterday's Results</h2>
+                  {Object.entries(finishedByLeague).map(([league, leagueMatches]) => (
+                    <LeagueMatchGroup
+                      key={league}
+                      league={league}
+                      matches={leagueMatches}
+                    />
+                  ))}
+                  {finishedMatches.length === 0 && (
+                    <p className="empty-message">No matches recorded for yesterday</p>
+                  )}
+                </>
+              )}
+
+              {/* TOMORROW VIEW */}
+              {selectedDate === "tomorrow" && (
+                <>
+                  <h2>Tomorrow's Fixtures</h2>
                   {Object.entries(upcomingByLeague).map(([league, leagueMatches]) => (
                     <LeagueMatchGroup
                       key={league}
@@ -158,6 +165,54 @@ export default function Home() {
                       matches={leagueMatches}
                     />
                   ))}
+                  {upcomingMatches.length === 0 && (
+                    <p className="empty-message">No matches scheduled for tomorrow</p>
+                  )}
+                </>
+              )}
+
+              {/* TODAY VIEW (LIVE, UPCOMING, FINISHED) */}
+              {selectedDate === "today" && (
+                <>
+                  {/* LIVE MATCHES */}
+                  <h2>🔴 Live</h2>
+                  {Object.entries(liveByLeague).map(([league, leagueMatches]) => (
+                    <LeagueMatchGroup
+                      key={league}
+                      league={league}
+                      matches={leagueMatches}
+                    />
+                  ))}
+                  {liveMatches.length === 0 && (
+                    <p className="empty-message">No live matches at the moment</p>
+                  )}
+
+                  {/* UPCOMING MATCHES TODAY */}
+                  {upcomingMatches.length > 0 && (
+                    <>
+                      <h2>Upcoming Matches</h2>
+                      {Object.entries(upcomingByLeague).map(([league, leagueMatches]) => (
+                        <LeagueMatchGroup
+                          key={league}
+                          league={league}
+                          matches={leagueMatches}
+                        />
+                      ))}
+                    </>
+                  )}
+
+                  {/* FINISHED MATCHES TODAY */}
+                  <h2>Finished Matches</h2>
+                  {Object.entries(finishedByLeague).map(([league, leagueMatches]) => (
+                    <LeagueMatchGroup
+                      key={league}
+                      league={league}
+                      matches={leagueMatches}
+                    />
+                  ))}
+                  {finishedMatches.length === 0 && (
+                    <p className="empty-message">No finished matches today</p>
+                  )}
                 </>
               )}
             </>

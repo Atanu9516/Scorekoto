@@ -3,6 +3,34 @@ import { getLineupForMatch } from "@/app/lib/lineups";
 import MatchDetailClient from "@/components/MatchDetailClient";
 import Link from "next/link";
 
+function isFinishedStatus(status) {
+  if (!status) return false;
+  const s = String(status).toUpperCase();
+  return ['FT', 'AET', 'PEN'].includes(s);
+}
+
+function isLiveStatus(status) {
+  if (!status) return false;
+  const s = String(status).toUpperCase();
+  return ['LIVE', '1H', '2H', 'HT', 'ET', 'BT', 'P', 'IN_PLAY'].includes(s);
+}
+
+function calculateElapsedMinute(matchDate, status) {
+  const s = String(status || '').toUpperCase();
+  if (s === 'HT') return 'HT';
+  if (isFinishedStatus(s)) return 'FT';
+  if (!matchDate) return 'LIVE';
+
+  const start = new Date(matchDate).getTime();
+  const now = Date.now();
+  const diffMinutes = Math.floor((now - start) / (60 * 1000));
+  if (diffMinutes < 0) return 'TBD';
+  if (diffMinutes <= 45) return `${Math.max(1, diffMinutes)}'`;
+  if (diffMinutes <= 60) return 'HT';
+  if (diffMinutes <= 105) return `${diffMinutes - 15}'`;
+  return "90+'";
+}
+
 // 1. Fetch from PostgreSQL database
 async function getMatchFromDb(matchId) {
   try {
@@ -37,9 +65,9 @@ async function getMatchFromDb(matchId) {
     }
 
     const row = result.rows[0];
-
     const homePoss = row.homePossession !== null && row.homePossession !== undefined ? Number(row.homePossession) : 52;
     const awayPoss = row.awayPossession !== null && row.awayPossession !== undefined ? Number(row.awayPossession) : (100 - homePoss);
+    const isLiveDb = isLiveStatus(row.status);
 
     return {
       id: row.id,
@@ -50,7 +78,11 @@ async function getMatchFromDb(matchId) {
       homeScore: row.homeScore ?? 0,
       awayScore: row.awayScore ?? 0,
       status: row.status || "FT",
-      minute: row.status === "LIVE" ? "65'" : "",
+      minute: isLiveDb
+        ? calculateElapsedMinute(row.matchDate, row.status)
+        : row.status === 'HT'
+        ? 'HT'
+        : '',
       league: row.league,
       venue: row.venue || row.stadium,
       matchDate: row.matchDate,
@@ -85,7 +117,7 @@ async function getMatchFromApiSports(matchId) {
           "x-apisports-key": apiKey,
           Accept: "application/json",
         },
-        next: { revalidate: 30 },
+        next: { revalidate: 20 },
       }
     );
 
@@ -104,9 +136,10 @@ async function getMatchFromApiSports(matchId) {
 
     if (data.response && Array.isArray(data.response) && data.response.length > 0) {
       const item = data.response[0];
-      const statusShort = item.fixture?.status?.short;
-      const isFinished = statusShort === "FT" || statusShort === "AET" || statusShort === "PEN";
-      const isUpcoming = statusShort === "NS" || statusShort === "TBD";
+      const statusShort = item.fixture?.status?.short || '';
+      const isFinished = isFinishedStatus(statusShort);
+      const isUpcoming = ['NS', 'TBD', 'TIMED'].includes(statusShort);
+      const isLive = isLiveStatus(statusShort);
 
       // Map statistics if present
       let stats = null;
@@ -159,40 +192,69 @@ async function getMatchFromApiSports(matchId) {
         };
       }
 
+      const homeScore = item.goals?.home ?? (isUpcoming ? null : 0);
+      const awayScore = item.goals?.away ?? (isUpcoming ? null : 0);
+      const resolvedStatus = isFinished ? "FT" : isUpcoming ? "UPCOMING" : "LIVE";
+
       const formattedMatch = {
         id: item.fixture.id,
-        homeTeam: item.teams.home.name,
-        awayTeam: item.teams.away.name,
-        homeLogo: item.teams.home.logo,
-        awayLogo: item.teams.away.logo,
-        homeScore: item.goals.home ?? (isUpcoming ? null : 0),
-        awayScore: item.goals.away ?? (isUpcoming ? null : 0),
-        status: isFinished ? "FT" : isUpcoming ? "UPCOMING" : "LIVE",
+        homeTeam: item.teams?.home?.name || "Home Team",
+        awayTeam: item.teams?.away?.name || "Away Team",
+        homeLogo: item.teams?.home?.logo || null,
+        awayLogo: item.teams?.away?.logo || null,
+        homeScore: homeScore,
+        awayScore: awayScore,
+        status: resolvedStatus,
         minute:
           statusShort === "HT"
             ? "HT"
-            : item.fixture.status.elapsed
+            : item.fixture?.status?.elapsed
             ? `${item.fixture.status.elapsed}'`
             : isUpcoming
             ? "TBD"
+            : isFinished
+            ? "FT"
             : "LIVE",
-        league: item.league.name || "Football League",
-        venue: item.fixture.venue?.name || "Stadium",
-        matchDate: item.fixture.date,
+        league: item.league?.name || "Football League",
+        venue: item.fixture?.venue?.name || "Stadium",
+        matchDate: item.fixture?.date,
         rawLineups: item.lineups || null,
-        events: (item.events || []).map((e) => ({
-          minute: `${e.time.elapsed}'`,
-          type: e.type.toLowerCase().includes("goal")
-            ? "goal"
-            : e.type.toLowerCase().includes("card")
-            ? e.detail?.toLowerCase().includes("yellow")
-              ? "yellow-card"
-              : "red-card"
-            : "substitution",
-          player: e.player?.name || "Player",
-          team: e.team?.name || "",
-          assist: e.assist?.name || null,
-        })),
+        events: (item.events || []).map((e) => {
+          const typeLower = (e.type || '').toLowerCase();
+          const detailLower = (e.detail || '').toLowerCase();
+          const isGoal = typeLower.includes('goal');
+          const isCard = typeLower.includes('card');
+          const isSub = typeLower.includes('sub');
+          const isYellow = isCard && detailLower.includes('yellow');
+          const isRed = isCard && (detailLower.includes('red') || detailLower.includes('second yellow'));
+          const isOwn = isGoal && detailLower.includes('own');
+          const isPen = isGoal && detailLower.includes('penalty');
+
+          const eventType = isOwn
+            ? 'own-goal'
+            : isPen
+            ? 'penalty-goal'
+            : isGoal
+            ? 'goal'
+            : isYellow
+            ? 'yellow-card'
+            : isRed
+            ? 'red-card'
+            : isSub
+            ? 'substitution'
+            : 'event';
+
+          return {
+            minute: e.time?.extra ? `${e.time.elapsed}+${e.time.extra}'` : `${e.time?.elapsed || 0}'`,
+            type: eventType,
+            player: e.player?.name?.trim() || '',
+            team: e.team?.name?.trim() || '',
+            assist: isSub ? null : (e.assist?.name?.trim() || null),
+            playerIn: isSub ? (e.assist?.name?.trim() || null) : null,
+            playerOut: isSub ? (e.player?.name?.trim() || null) : null,
+            detail: e.detail || '',
+          };
+        }),
         stats: stats || {
           possession: [50, 50],
           shots: [8, 6],
@@ -205,7 +267,29 @@ async function getMatchFromApiSports(matchId) {
         },
       };
 
-      // Auto-save finished live match to PostgreSQL so it persists in DB
+      // Sync score update to PostgreSQL database
+      try {
+        await pool.query(
+          `UPDATE match SET 
+             home_score = COALESCE($1, home_score), 
+             away_score = COALESCE($2, away_score), 
+             status = $3,
+             home_possession = COALESCE($4, home_possession),
+             away_possession = COALESCE($5, away_possession)
+           WHERE match_id = $6`,
+          [
+            homeScore,
+            awayScore,
+            resolvedStatus,
+            stats?.possession?.[0] ?? null,
+            stats?.possession?.[1] ?? null,
+            matchId,
+          ]
+        );
+      } catch (uErr) {
+        // Match might not yet be in DB; saveFinishedMatchToDb will insert if finished
+      }
+
       if (isFinished) {
         await saveFinishedMatchToDb(formattedMatch, item);
       }
@@ -251,13 +335,42 @@ async function saveFinishedMatchToDb(formattedMatch, rawItem) {
     const matchDate = formattedMatch.matchDate || new Date();
     const status = formattedMatch.status || "FT";
 
-    const homeTeamId = rawItem?.teams?.home?.id || matchId * 10 + 1;
-    const awayTeamId = rawItem?.teams?.away?.id || matchId * 10 + 2;
+    let homeTeamId = rawItem?.teams?.home?.id;
+    const dbHomeRes = await pool.query(
+      `SELECT team_id FROM team WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [homeTeamName]
+    );
+    if (dbHomeRes.rows.length > 0) {
+      homeTeamId = dbHomeRes.rows[0].team_id;
+    } else if (!homeTeamId) {
+      homeTeamId = matchId * 10 + 1;
+    }
+
+    let awayTeamId = rawItem?.teams?.away?.id;
+    const dbAwayRes = await pool.query(
+      `SELECT team_id FROM team WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+      [awayTeamName]
+    );
+    if (dbAwayRes.rows.length > 0) {
+      awayTeamId = dbAwayRes.rows[0].team_id;
+    } else if (!awayTeamId) {
+      awayTeamId = matchId * 10 + 2;
+    }
 
     let seasonId = 1;
-    const seasonRes = await pool.query("SELECT season_id FROM season LIMIT 1");
-    if (seasonRes.rows.length > 0) {
-      seasonId = seasonRes.rows[0].season_id;
+    const rawLeagueId = rawItem?.league?.id;
+    if (rawLeagueId) {
+      const sRes = await pool.query(
+        `SELECT season_id FROM season WHERE league_id = $1 ORDER BY season_id DESC LIMIT 1`,
+        [rawLeagueId]
+      );
+      if (sRes.rows.length > 0) seasonId = sRes.rows[0].season_id;
+    }
+    if (seasonId === 1) {
+      const seasonRes = await pool.query("SELECT season_id FROM season LIMIT 1");
+      if (seasonRes.rows.length > 0) {
+        seasonId = seasonRes.rows[0].season_id;
+      }
     }
 
     // 1. Ensure home team in DB
@@ -335,12 +448,25 @@ export default async function MatchPage({ params }) {
   let match = null;
 
   if (matchId && !isNaN(matchId)) {
-    // 1. Check PostgreSQL database FIRST! (Guarantees Admin updates are preserved)
-    match = await getMatchFromDb(matchId);
+    // 1. Check PostgreSQL database first
+    const dbMatch = await getMatchFromDb(matchId);
+    const isDbFinished = dbMatch ? isFinishedStatus(dbMatch.status) : false;
 
-    // 2. Fallback to online API-Sports only if match does not exist in DB
-    if (!match) {
-      match = await getMatchFromApiSports(matchId);
+    // 2. If match is in-play, live, or not yet in DB, fetch latest live data from API-Sports
+    if (!dbMatch || !isDbFinished) {
+      const apiMatch = await getMatchFromApiSports(matchId);
+      if (apiMatch) {
+        match = apiMatch;
+        if (dbMatch) {
+          match.homeLogo = apiMatch.homeLogo || dbMatch.homeLogo;
+          match.awayLogo = apiMatch.awayLogo || dbMatch.awayLogo;
+          match.venue = apiMatch.venue || dbMatch.venue;
+        }
+      } else {
+        match = dbMatch;
+      }
+    } else {
+      match = dbMatch;
     }
   }
 

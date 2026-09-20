@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { getEventsForMatch } from "@/app/lib/events";
+import { getEventsForMatch, isGenericOrMissingPlayer } from "@/app/lib/events";
 
 export default function MatchTabs({
   match,
@@ -252,23 +252,25 @@ function MatchEvent({ event, match }) {
           {getEventTitle(event)}
         </strong>
 
-        <span>
-          {event.team}
-        </span>
+        {event.team && (
+          <span>
+            {event.team}
+          </span>
+        )}
 
-        {event.assist && (
+        {event.assist && !isGenericOrMissingPlayer(event.assist) && (
           <small>
             Assist: {event.assist}
           </small>
         )}
 
-        {event.playerIn && (
+        {event.playerIn && !isGenericOrMissingPlayer(event.playerIn) && (
           <small className="sub-player-in">
             In: {event.playerIn}
           </small>
         )}
 
-        {event.playerOut && (
+        {event.playerOut && !isGenericOrMissingPlayer(event.playerOut) && (
           <small className="sub-player-out">
             Out: {event.playerOut}
           </small>
@@ -342,53 +344,101 @@ function getEventIcon(type) {
 
 
 function getEventTitle(event) {
+  const hasRealPlayer = !isGenericOrMissingPlayer(event.player);
+  const teamLabel = event.team ? `for ${event.team}` : "";
+
   switch (event.type) {
     case "goal":
-      return `${event.player} scores`;
+      return hasRealPlayer ? `${event.player} scores` : `Goal ${teamLabel}`.trim();
 
     case "penalty-goal":
-      return `${event.player} scores a penalty`;
+      return hasRealPlayer ? `${event.player} scores a penalty` : `Penalty scored ${teamLabel}`.trim();
 
     case "own-goal":
-      return `${event.player} own goal`;
+      return hasRealPlayer ? `${event.player} own goal` : `Own Goal ${teamLabel}`.trim();
 
     case "yellow-card":
-      return `${event.player} booked`;
+      return hasRealPlayer ? `${event.player} booked` : `Yellow Card ${teamLabel}`.trim();
 
     case "red-card":
-      return `${event.player} sent off`;
+      return hasRealPlayer ? `${event.player} sent off` : `Red Card ${teamLabel}`.trim();
 
     case "substitution":
-      return "Substitution";
+      if (
+        event.playerIn &&
+        event.playerOut &&
+        !isGenericOrMissingPlayer(event.playerIn) &&
+        !isGenericOrMissingPlayer(event.playerOut)
+      ) {
+        return `Sub: ${event.playerIn} in for ${event.playerOut}`;
+      }
+      return `Substitution ${teamLabel}`.trim();
 
     case "whistle":
       return event.detail || "Match Whistle";
 
     default:
-      return event.detail || event.player || "Match event";
+      return event.detail || (hasRealPlayer ? event.player : `Match event ${teamLabel}`.trim());
   }
 }
 
 
 function getCommentary(event) {
+  const hasRealPlayer = !isGenericOrMissingPlayer(event.player);
+  const hasRealAssist = !isGenericOrMissingPlayer(event.assist);
+  const teamName = event.team || "Team";
+
   switch (event.type) {
     case "goal":
-      return `GOAL! ${event.player} scores for ${event.team}.${event.assist ? ` (Assisted by ${event.assist})` : ''}`;
+      if (hasRealPlayer) {
+        return `GOAL! ${event.player} scores for ${teamName}.${
+          hasRealAssist ? ` (Assisted by ${event.assist})` : ""
+        }`;
+      }
+      return `GOAL! ${teamName} finds the back of the net! A crucial strike to alter the scoreline.`;
 
     case "penalty-goal":
-      return `GOAL! ${event.player} converts the penalty for ${event.team}.`;
+      if (hasRealPlayer) {
+        return `GOAL! ${event.player} converts the penalty for ${teamName}.`;
+      }
+      return `GOAL! Penalty converted for ${teamName}.`;
 
     case "own-goal":
-      return `Own goal by ${event.player}.`;
+      if (hasRealPlayer) {
+        return `Own goal by ${event.player}. Unfortunate deflection for ${teamName}.`;
+      }
+      return `Own goal scored! Unfortunate deflection into the net.`;
 
     case "yellow-card":
-      return `${event.player} receives a yellow card for ${event.team}.${event.detail ? ` (${event.detail})` : ''}`;
+      if (hasRealPlayer) {
+        return `${event.player} receives a yellow card for ${teamName}.${
+          event.detail ? ` (${event.detail})` : ""
+        }`;
+      }
+      return `Yellow card issued to a ${teamName} player.${
+        event.detail ? ` (${event.detail})` : ""
+      }`;
 
     case "red-card":
-      return `${event.player} receives a red card for ${event.team}.${event.detail ? ` (${event.detail})` : ''}`;
+      if (hasRealPlayer) {
+        return `RED CARD! ${event.player} is sent off for ${teamName}.${
+          event.detail ? ` (${event.detail})` : ""
+        }`;
+      }
+      return `RED CARD! ${teamName} are reduced to ten men.${
+        event.detail ? ` (${event.detail})` : ""
+      }`;
 
     case "substitution":
-      return `${event.team} make a substitution: ${event.playerIn || 'Substitute'} replaces ${event.playerOut || event.player}.`;
+      if (
+        event.playerIn &&
+        event.playerOut &&
+        !isGenericOrMissingPlayer(event.playerIn) &&
+        !isGenericOrMissingPlayer(event.playerOut)
+      ) {
+        return `${teamName} substitution: ${event.playerIn} replaces ${event.playerOut}.`;
+      }
+      return `${teamName} make a substitution.`;
 
     case "whistle":
       return event.detail || `Whistle blown at ${event.minute}.`;
