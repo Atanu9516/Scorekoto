@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import DateSelector from "@/components/DateSelector";
+import MatchTypeSelector from "@/components/MatchTypeSelector";
 import LeagueMatchGroup from "@/components/LeagueMatchGroup";
 import NewsSidebar from "@/components/NewsSidebar";
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState("today");
+  const [selectedType, setSelectedType] = useState("live");
   const [liveMatches, setLiveMatches] = useState([]);
   const [finishedMatches, setFinishedMatches] = useState([]);
   const [upcomingMatches, setUpcomingMatches] = useState([]);
@@ -117,6 +119,11 @@ export default function Home() {
             setSelectedDate={setSelectedDate}
           />
 
+          <MatchTypeSelector
+            selectedType={selectedType}
+            setSelectedType={setSelectedType}
+          />
+
           {/* API Notification / Status Message */}
           {apiLimitHit && (
             <div className="live-api-banner">
@@ -137,84 +144,45 @@ export default function Home() {
             </div>
           ) : (
             <>
-              {/* YESTERDAY VIEW */}
-              {selectedDate === "yesterday" && (
-                <>
-                  <h2>Yesterday's Results</h2>
-                  {Object.entries(finishedByLeague).map(([league, leagueMatches]) => (
-                    <LeagueMatchGroup
-                      key={league}
-                      league={league}
-                      matches={leagueMatches}
-                    />
-                  ))}
-                  {finishedMatches.length === 0 && (
-                    <p className="empty-message">No matches recorded for yesterday</p>
-                  )}
-                </>
-              )}
+              {(() => {
+                const matchViews = {
+                  live: {
+                    title: "Live Matches",
+                    matches: liveMatches,
+                    groupedMatches: liveByLeague,
+                    emptyMessage: "No live matches for this date",
+                  },
+                  upcoming: {
+                    title: "Upcoming Matches",
+                    matches: upcomingMatches,
+                    groupedMatches: upcomingByLeague,
+                    emptyMessage: "No upcoming matches for this date",
+                  },
+                  finished: {
+                    title: "Finished Matches",
+                    matches: finishedMatches,
+                    groupedMatches: finishedByLeague,
+                    emptyMessage: "No finished matches for this date",
+                  },
+                };
+                const selectedView = matchViews[selectedType];
 
-              {/* TOMORROW VIEW */}
-              {selectedDate === "tomorrow" && (
-                <>
-                  <h2>Tomorrow's Fixtures</h2>
-                  {Object.entries(upcomingByLeague).map(([league, leagueMatches]) => (
-                    <LeagueMatchGroup
-                      key={league}
-                      league={league}
-                      matches={leagueMatches}
-                    />
-                  ))}
-                  {upcomingMatches.length === 0 && (
-                    <p className="empty-message">No matches scheduled for tomorrow</p>
-                  )}
-                </>
-              )}
-
-              {/* TODAY VIEW (LIVE, UPCOMING, FINISHED) */}
-              {selectedDate === "today" && (
-                <>
-                  {/* LIVE MATCHES */}
-                  <h2>🔴 Live</h2>
-                  {Object.entries(liveByLeague).map(([league, leagueMatches]) => (
-                    <LeagueMatchGroup
-                      key={league}
-                      league={league}
-                      matches={leagueMatches}
-                    />
-                  ))}
-                  {liveMatches.length === 0 && (
-                    <p className="empty-message">No live matches at the moment</p>
-                  )}
-
-                  {/* UPCOMING MATCHES TODAY */}
-                  {upcomingMatches.length > 0 && (
-                    <>
-                      <h2>Upcoming Matches</h2>
-                      {Object.entries(upcomingByLeague).map(([league, leagueMatches]) => (
-                        <LeagueMatchGroup
-                          key={league}
-                          league={league}
-                          matches={leagueMatches}
-                        />
-                      ))}
-                    </>
-                  )}
-
-                  {/* FINISHED MATCHES TODAY */}
-                  <h2>Finished Matches</h2>
-                  {Object.entries(finishedByLeague).map(([league, leagueMatches]) => (
-                    <LeagueMatchGroup
-                      key={league}
-                      league={league}
-                      matches={leagueMatches}
-                    />
-                  ))}
-                  {finishedMatches.length === 0 && (
-                    <p className="empty-message">No finished matches today</p>
-                  )}
-                </>
-              )}
+                return (
+                  <>
+                    <h2>{selectedView.title}</h2>
+                    {Object.entries(selectedView.groupedMatches).map(([league, leagueMatches]) => (
+                      <LeagueMatchGroup
+                        key={league}
+                        league={league}
+                        matches={leagueMatches}
+                      />
+                    ))}
+                    {selectedView.matches.length === 0 && (
+                      <p className="empty-message">{selectedView.emptyMessage}</p>
+                    )}
+                  </>
+                );
+              })()}
             </>
           )}
         </section>

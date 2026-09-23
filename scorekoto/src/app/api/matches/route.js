@@ -12,6 +12,25 @@ let liveCache = {
 const dateCache = new Map(); // key: `${dateParam}` -> { timestamp, data, apiLimitHit, message }
 const CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
+const competitionNames = {
+  2: 'UEFA Champions League',
+  4: 'Euro Championship',
+  13: 'Copa Libertadores',
+  39: 'Premier League',
+  40: 'Championship',
+  61: 'Ligue 1',
+  78: 'Bundesliga',
+  88: 'Eredivisie',
+  94: 'Primeira Liga',
+  135: 'Serie A',
+  140: 'La Liga',
+  307: 'Saudi Pro League',
+};
+
+function getCompetitionName(leagueId, leagueName = 'Football League') {
+  return competitionNames[Number(leagueId)] || leagueName;
+}
+
 // Helper to get stored league IDs and names from PostgreSQL database
 async function getStoredLeagues() {
   try {
@@ -94,7 +113,8 @@ function mapApiFixture(item, dateLabel = 'today') {
         : isFinished
         ? 'FT'
         : 'LIVE',
-    league: item.league?.name || 'Football League',
+      leagueId: item.league?.id || null,
+    league: getCompetitionName(item.league?.id, item.league?.name),
     matchDate: item.fixture?.date,
     venue: item.fixture?.venue?.name || 'Stadium',
     events: (item.events || []).map((e) => {
@@ -177,15 +197,51 @@ async function autoSaveFixturesToDb(fixtures) {
           [awayId, f.awayTeam, f.awayLogo, f.venue || 'Stadium']
         );
 
-        // Resolve season
-        const seasonRes = await pool.query(`SELECT season_id FROM season LIMIT 1`);
-        const seasonId = seasonRes.rows[0]?.season_id || 1;
+        // Keep the fixture attached to its actual competition instead of the first season in the database.
+        let seasonId = null;
+        if (f.leagueId) {
+          const leagueName = getCompetitionName(f.leagueId, f.league);
+          await pool.query(
+            `INSERT INTO league (league_id, name, country, type)
+             VALUES ($1, $2, 'Global', 'League')
+             ON CONFLICT (league_id) DO UPDATE SET name = EXCLUDED.name`,
+            [f.leagueId, leagueName]
+          );
+
+          const seasonYear = f.matchDate ? new Date(f.matchDate).getUTCFullYear() : new Date().getUTCFullYear();
+          const seasonRes = await pool.query(
+            `SELECT season_id FROM season
+             WHERE league_id = $1 AND year LIKE $2
+             ORDER BY season_id DESC LIMIT 1`,
+            [f.leagueId, `${seasonYear}%`]
+          );
+
+          if (seasonRes.rows.length > 0) {
+            seasonId = seasonRes.rows[0].season_id;
+          } else {
+            const insertSeason = await pool.query(
+              `INSERT INTO season (league_id, year, start_date, end_date)
+               VALUES ($1, $2, $3, $4)
+               RETURNING season_id`,
+              [
+                f.leagueId,
+                `${seasonYear}-${seasonYear + 1}`,
+                `${seasonYear}-07-01`,
+                `${seasonYear + 1}-06-30`,
+              ]
+            );
+            seasonId = insertSeason.rows[0]?.season_id;
+          }
+        }
+
+        if (!seasonId) continue;
 
         // Upsert match
         await pool.query(
           `INSERT INTO match (match_id, season_id, home_team_id, away_team_id, match_date, venue, status, home_score, away_score)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT (match_id) DO UPDATE SET
+             season_id = EXCLUDED.season_id,
              status = EXCLUDED.status,
              home_score = EXCLUDED.home_score,
              away_score = EXCLUDED.away_score,
@@ -352,6 +408,7 @@ export async function GET(request) {
         ht.logo_url as "homeLogo",
         COALESCE(at.name, 'Away Team') as "awayTeam",
         at.logo_url as "awayLogo",
+        l.league_id as "leagueId",
         COALESCE(l.name, 'Premier League') as league
       FROM match m
       LEFT JOIN team ht ON m.home_team_id = ht.team_id
@@ -390,7 +447,7 @@ export async function GET(request) {
           awayScore: row.awayScore ?? 0,
           status: row.status || 'FT',
           minute: '',
-          league: row.league,
+          league: getCompetitionName(row.leagueId, row.league),
           events: [],
           stats: null,
         }));
@@ -423,7 +480,7 @@ export async function GET(request) {
             awayScore: row.awayScore ?? 0,
             status: row.status || 'FT',
             minute: '',
-            league: row.league,
+            league: getCompetitionName(row.leagueId, row.league),
             events: [],
             stats: null,
           }));
@@ -472,7 +529,7 @@ export async function GET(request) {
           awayScore: null,
           status: 'UPCOMING',
           minute: 'TBD',
-          league: row.league,
+          league: getCompetitionName(row.leagueId, row.league),
           events: [],
           stats: null,
         }));
@@ -501,6 +558,7 @@ export async function GET(request) {
     // CASE C: TODAY'S MATCHES (DEFAULT)
     // ==========================================
     const liveResult = await fetchLiveMatchesFromApi(storedLeagues, forceRefresh);
+    const todayApiResult = await fetchFixturesByDate(todayDate, 'today', storedLeagues, forceRefresh);
 
     let dbFinishedMatches = [];
     let dbLiveMatches = [];
@@ -527,7 +585,7 @@ export async function GET(request) {
         awayScore: row.awayScore ?? 0,
         status: row.status || 'FT',
         minute: '',
-        league: row.league,
+        league: getCompetitionName(row.leagueId, row.league),
         events: [],
         stats: null,
       }));
@@ -550,7 +608,7 @@ export async function GET(request) {
         awayScore: row.awayScore ?? 0,
         status: 'LIVE',
         minute: calculateElapsedMinute(row.matchDate, row.status),
-        league: row.league,
+        league: getCompetitionName(row.leagueId, row.league),
         events: [],
         stats: null,
       }));
@@ -573,7 +631,7 @@ export async function GET(request) {
         awayScore: null,
         status: 'UPCOMING',
         minute: 'TBD',
-        league: row.league,
+        league: getCompetitionName(row.leagueId, row.league),
         events: [],
         stats: null,
       }));
@@ -581,8 +639,16 @@ export async function GET(request) {
       console.error('Failed to query matches from DB:', dbErr);
     }
 
+    const apiTodayMatches = todayApiResult.matches || [];
+    const apiTodayFinished = apiTodayMatches.filter((match) => match.status === 'FT');
+    const apiTodayUpcoming = apiTodayMatches.filter((match) => match.status === 'UPCOMING');
+    const apiTodayLive = apiTodayMatches.filter((match) => match.status === 'LIVE');
+
+    dbFinishedMatches = apiTodayFinished.length > 0 ? apiTodayFinished : dbFinishedMatches;
+    dbUpcomingMatches = apiTodayUpcoming.length > 0 ? apiTodayUpcoming : dbUpcomingMatches;
+
     // Merge live matches
-    const combinedLiveMatches = [...dbLiveMatches];
+    const combinedLiveMatches = apiTodayLive.length > 0 ? [...apiTodayLive] : [...dbLiveMatches];
     for (const apiMatch of liveResult.matches) {
       if (!combinedLiveMatches.some((m) => m.id === apiMatch.id)) {
         combinedLiveMatches.push(apiMatch);
@@ -593,8 +659,8 @@ export async function GET(request) {
       success: true,
       date: todayDate,
       liveMatches: combinedLiveMatches,
-      apiLimitHit: liveResult.apiLimitHit,
-      apiMessage: liveResult.message,
+      apiLimitHit: liveResult.apiLimitHit || todayApiResult.apiLimitHit,
+      apiMessage: liveResult.message || todayApiResult.message,
       finishedMatches: dbFinishedMatches,
       upcomingMatches: dbUpcomingMatches,
     });
