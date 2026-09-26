@@ -67,14 +67,15 @@ export async function GET() {
             const venue = tItem.venue;
 
             const teamQuery = `
-              INSERT INTO Team (Team_ID, Name, Short_Name, Stadium_Name)
-              VALUES ($1, $2, $3, $4)
+              INSERT INTO Team (Team_ID, Name, Short_Name, Stadium_Name, logo_url)
+              VALUES ($1, $2, $3, $4, $5)
               ON CONFLICT (Team_ID) DO UPDATE SET 
                 Name = EXCLUDED.Name,
                 Short_Name = EXCLUDED.Short_Name,
-                Stadium_Name = EXCLUDED.Stadium_Name;
+                Stadium_Name = EXCLUDED.Stadium_Name,
+                logo_url = COALESCE(EXCLUDED.logo_url, Team.logo_url);
             `;
-            await pool.query(teamQuery, [t.id, t.name, t.code, venue ? venue.name : null]);
+            await pool.query(teamQuery, [t.id, t.name, t.code, venue ? venue.name : null, t.logo || null]);
             totalTeamsAdded++;
           }
         }
@@ -103,9 +104,14 @@ export async function GET() {
               INSERT INTO match (match_id, season_id, home_team_id, away_team_id, match_date, status, home_score, away_score, venue)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
               ON CONFLICT (match_id) DO UPDATE SET 
+                  season_id = EXCLUDED.season_id,
+                  home_team_id = EXCLUDED.home_team_id,
+                  away_team_id = EXCLUDED.away_team_id,
+                  match_date = EXCLUDED.match_date,
                   status = EXCLUDED.status,
                   home_score = EXCLUDED.home_score,
-                  away_score = EXCLUDED.away_score;
+                  away_score = EXCLUDED.away_score,
+                  venue = EXCLUDED.venue;
             `;
 
             await pool.query(matchQuery, [
@@ -115,8 +121,8 @@ export async function GET() {
               teams.away.id,
               fixture.date,
               fixture.status.short,
-              goals.home !== null ? goals.home : 0,
-              goals.away !== null ? goals.away : 0,
+              goals.home ?? null,
+              goals.away ?? null,
               fixture.venue ? fixture.venue.name : null
             ]);
             totalMatchesAdded++;

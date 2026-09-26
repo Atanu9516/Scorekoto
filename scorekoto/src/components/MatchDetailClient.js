@@ -4,6 +4,16 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import MatchTabs from "@/components/MatchTabs";
 import MatchReactions from "@/components/MatchReactions";
+import Icon from "@/components/Icon";
+import LocalKickoffTime from "@/components/LocalKickoffTime";
+import { getEventsForMatch, isGenericOrMissingPlayer } from "@/app/lib/events";
+
+const SCOREBOARD_EVENT_TYPES = new Set([
+  "goal",
+  "penalty-goal",
+  "own-goal",
+  "red-card",
+]);
 
 export default function MatchDetailClient({ initialMatch, initialLineup }) {
   const [match, setMatch] = useState(initialMatch);
@@ -42,7 +52,7 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
         const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         setLastUpdated(timeStr);
         if (manual) {
-          setFeedbackMsg("Live data updated!");
+          setFeedbackMsg(data.providerMessage || "Live data updated!");
           setTimeout(() => setFeedbackMsg(""), 3500);
         }
       }
@@ -91,6 +101,15 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
 
   const homeLogo = match.homeLogo;
   const awayLogo = match.awayLogo;
+  const scoreboardEvents = getEventsForMatch(match, match.events, lineup)
+    .filter((event) => SCOREBOARD_EVENT_TYPES.has(event.type));
+  const homeIncidents = groupScoreboardIncidents(
+    scoreboardEvents.filter((event) => isSameTeam(event.team, match.homeTeam))
+  );
+  const awayIncidents = groupScoreboardIncidents(
+    scoreboardEvents.filter((event) => isSameTeam(event.team, match.awayTeam))
+  );
+  const hasScoreboardIncidents = homeIncidents.length > 0 || awayIncidents.length > 0;
 
   return (
     <main className="match-page">
@@ -99,17 +118,17 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
         {/* Navigation & Live Control Bar */}
         <div className="match-top-bar">
           <Link href="/" className="match-back-link">
-            ← Back to Matches
+            <Icon name="arrowLeft" /> Back to Matches
           </Link>
 
           <div className="match-refresh-controls">
             {feedbackMsg && (
               <span className="match-refresh-feedback">
-                ✅ {feedbackMsg}
+                <Icon name="check" /> {feedbackMsg}
               </span>
             )}
             <span className="match-last-updated">
-              🕒 Updated: {lastUpdated}
+              <Icon name="clock" /> Updated: {lastUpdated}
             </span>
             <button
               className={`match-refresh-btn ${isRefreshing ? "refreshing" : ""}`}
@@ -117,7 +136,7 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
               disabled={isRefreshing}
               title="Click to fetch the latest live score, minute, and match events"
             >
-              <span className="refresh-icon-spin">{isRefreshing ? "⏳" : "🔄"}</span>
+              <Icon name={isRefreshing ? "loader" : "refresh"} className="refresh-icon-spin" />
               <span>{isRefreshing ? "Refreshing..." : "Refresh Live Data"}</span>
             </button>
           </div>
@@ -130,7 +149,15 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
           <span>
             {isFinished ? "Finished" : isUpcoming ? "Upcoming" : "Live"}
           </span>
-          {match.minute && <span> • {match.minute}</span>}
+          {(match.minute || isUpcoming) && (
+            isUpcoming ? (
+              <LocalKickoffTime
+                prefix=" • "
+                matchDate={match.matchDate}
+                status={match.providerStatus || matchStatus}
+              />
+            ) : <span> • {match.minute}</span>
+          )}
         </div>
 
         {/* SCOREBOARD */}
@@ -186,12 +213,33 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
           </div>
         </div>
 
+        {hasScoreboardIncidents && (
+          <div className="scoreboard-incidents">
+            <ScoreboardIncidentList
+              incidents={homeIncidents}
+              team={match.homeTeam}
+            />
+            <ScoreboardIncidentList
+              incidents={awayIncidents}
+              team={match.awayTeam}
+            />
+          </div>
+        )}
+
         {/* MATCH INFORMATION */}
         <div className="match-info">
           {isLive && <span className="live-label">LIVE MATCH</span>}
           {isFinished && <span>Full Time</span>}
-          {isUpcoming && <span>Kick-off at {match.minute || "TBD"}</span>}
-          {match.venue && <span className="match-venue-tag"> 📍 {match.venue}</span>}
+          {isUpcoming && (
+            <span>
+              Kick-off at{" "}
+              <LocalKickoffTime
+                matchDate={match.matchDate}
+                status={match.providerStatus || matchStatus}
+              />
+            </span>
+          )}
+          {match.venue && <span className="match-venue-tag"><Icon name="mapPin" /> {match.venue}</span>}
         </div>
       </div>
 
@@ -202,4 +250,85 @@ export default function MatchDetailClient({ initialMatch, initialLineup }) {
       <MatchReactions matchId={match.id} />
     </main>
   );
+}
+
+function ScoreboardIncidentList({ incidents, team }) {
+  if (incidents.length === 0) {
+    return <span aria-hidden="true" />;
+  }
+
+  return (
+    <ul className="scoreboard-incident-list" aria-label={`${team} match incidents`}>
+      {incidents.map((incident) => {
+        const isRedCard = incident.type === "red-card";
+        const qualifier = incident.type === "own-goal"
+          ? "OG"
+          : incident.type === "penalty-goal"
+          ? "P"
+          : null;
+        const incidentName = isGenericOrMissingPlayer(incident.player)
+          ? getIncidentFallback(incident.type)
+          : incident.player;
+        const minutes = incident.minutes.filter(Boolean).join(", ");
+        const incidentDescription = `${getIncidentFallback(incident.type)}: ${incidentName}${minutes ? `, ${minutes}` : ""}`;
+
+        return (
+          <li
+            className={`scoreboard-incident scoreboard-incident-${incident.type}`}
+            key={`${incident.type}-${incidentName}-${minutes}`}
+            aria-label={incidentDescription}
+            title={incidentDescription}
+          >
+            <Icon name={isRedCard ? "redCard" : "football"} />
+            <span className="scoreboard-incident-name">{incidentName}</span>
+            {qualifier && (
+              <span className="scoreboard-incident-qualifier">({qualifier})</span>
+            )}
+            {minutes && <time>{minutes}</time>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function groupScoreboardIncidents(events) {
+  const grouped = new Map();
+
+  events.forEach((event) => {
+    const player = isGenericOrMissingPlayer(event.player) ? "" : event.player.trim();
+    const key = `${event.type}:${player.toLocaleLowerCase()}`;
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.minutes.push(event.minute);
+      return;
+    }
+
+    grouped.set(key, {
+      type: event.type,
+      player,
+      minutes: [event.minute],
+    });
+  });
+
+  return Array.from(grouped.values());
+}
+
+function isSameTeam(eventTeam, matchTeam) {
+  return String(eventTeam || "").trim().toLocaleLowerCase() ===
+    String(matchTeam || "").trim().toLocaleLowerCase();
+}
+
+function getIncidentFallback(type) {
+  switch (type) {
+    case "own-goal":
+      return "Own goal";
+    case "penalty-goal":
+      return "Penalty goal";
+    case "red-card":
+      return "Red card";
+    default:
+      return "Goal";
+  }
 }

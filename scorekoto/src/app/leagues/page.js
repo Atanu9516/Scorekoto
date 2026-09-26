@@ -1,5 +1,8 @@
 import Link from "next/link";
 import pool from "@/app/lib/db";
+import Icon from "@/components/Icon";
+
+export const dynamic = "force-dynamic";
 
 async function getLeagues() {
   try {
@@ -29,10 +32,11 @@ export default async function LeaguesPage() {
 
   return (
     <main className="leagues-page">
-      <h1>🏆 Football Competitions</h1>
-      <p style={{ color: "var(--muted)", margin: "8px 0 24px" }}>
-        Explore live tables, match schedules, and clubs across major global leagues.
-      </p>
+      <section className="page-title">
+        <span className="page-title-kicker">Competition hub</span>
+        <h1><Icon name="trophy" /> Football Competitions</h1>
+        <p>Explore live tables, match schedules, and clubs across major global leagues.</p>
+      </section>
 
       <div className="league-grid">
         {leagues.map((league) => (
@@ -45,13 +49,13 @@ export default async function LeaguesPage() {
               {league.logo_url ? (
                 <img src={league.logo_url} alt={league.name} style={{ width: "36px", height: "36px", objectFit: "contain" }} />
               ) : (
-                "🏆"
+                <Icon name="trophy" />
               )}
             </div>
 
             <div>
               <h2>{league.name}</h2>
-              <p>{league.country || "Global League"}</p>
+              <p>{league.country || "Country unavailable"}</p>
             </div>
           </Link>
         ))}

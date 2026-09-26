@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import pool from '../../../lib/db';
+import { getTeamManagerName } from '../../../lib/team-manager';
+import { getTeamSquad } from '../../../lib/team-squad';
 
 export async function GET(request, { params }) {
   try {
@@ -36,6 +38,7 @@ export async function GET(request, { params }) {
 
     const teamData = teamRes.rows[0];
     const teamId = teamData.team_id;
+    const managerNamePromise = getTeamManagerName(teamId, teamData.manager_name);
 
     // Determine league and country from recent match / season if available
     const leagueQuery = `
@@ -44,37 +47,19 @@ export async function GET(request, { params }) {
       JOIN season s ON m.season_id = s.season_id
       JOIN league l ON s.league_id = l.league_id
       WHERE m.home_team_id = $1 OR m.away_team_id = $1
-      ORDER BY m.match_date DESC
+      GROUP BY l.league_id, l.name, l.country
+      ORDER BY
+        CASE WHEN LOWER(COALESCE(l.country, 'world')) = 'world' THEN 1 ELSE 0 END,
+        MAX(m.match_date) DESC,
+        COUNT(*) DESC
       LIMIT 1;
     `;
     const leagueRes = await pool.query(leagueQuery, [teamId]);
     const leagueInfo = leagueRes.rows[0] || {};
 
-    // 2. Fetch Squad / Players from player table
-    const playersQuery = `
-      SELECT 
-        player_id as id,
-        CONCAT(first_name, ' ', last_name) as name,
-        first_name,
-        last_name,
-        primary_position as position,
-        nationality,
-        date_of_birth,
-        photo_url as photo,
-        LOWER(REPLACE(CONCAT(first_name, ' ', last_name), ' ', '-')) as slug
-      FROM player
-      WHERE team_id = $1
-      ORDER BY 
-        CASE primary_position
-          WHEN 'Goalkeeper' THEN 1
-          WHEN 'Defender' THEN 2
-          WHEN 'Midfielder' THEN 3
-          WHEN 'Forward' THEN 4
-          ELSE 5
-        END,
-        last_name ASC;
-    `;
-    const playersRes = await pool.query(playersQuery, [teamId]);
+    // 2. Fetch the authoritative current-squad snapshot. A player's primary
+    // team field is not a membership table and cannot model national squads.
+    const squadPromise = getTeamSquad(teamId);
 
     // 3. Fetch Matches from match table
     const matchesQuery = `
@@ -88,18 +73,16 @@ export async function GET(request, { params }) {
         ht.logo_url as "homeLogo",
         at.name as "awayTeam",
         at.logo_url as "awayLogo",
-        COALESCE(l.name, 'Football League') as league
+        l.name as league
       FROM match m
-      LEFT JOIN team ht ON m.home_team_id = ht.team_id
-      LEFT JOIN team at ON m.away_team_id = at.team_id
-      LEFT JOIN season s ON m.season_id = s.season_id
-      LEFT JOIN league l ON s.league_id = l.league_id
+      JOIN team ht ON m.home_team_id = ht.team_id
+      JOIN team at ON m.away_team_id = at.team_id
+      JOIN season s ON m.season_id = s.season_id
+      JOIN league l ON s.league_id = l.league_id
       WHERE m.home_team_id = $1 OR m.away_team_id = $1
-         OR LOWER(ht.name) = LOWER($2) OR LOWER(at.name) = LOWER($2)
-      ORDER BY m.match_date DESC
-      LIMIT 100;
+      ORDER BY m.match_date DESC;
     `;
-    const matchesRes = await pool.query(matchesQuery, [teamId, teamData.name]);
+    const matchesRes = await pool.query(matchesQuery, [teamId]);
     const matches = matchesRes.rows;
 
     // 4. Calculate Stats from completed matches
@@ -136,6 +119,7 @@ export async function GET(request, { params }) {
       ORDER BY tt.season_won DESC;
     `;
     const trophiesRes = await pool.query(trophiesQuery, [teamId]);
+    const [managerName, squad] = await Promise.all([managerNamePromise, squadPromise]);
 
     const formattedTeam = {
       id: teamData.team_id,
@@ -145,15 +129,16 @@ export async function GET(request, { params }) {
       stadium: teamData.stadium_name,
       logo: teamData.logo_url,
       history: teamData.history,
-      manager: teamData.manager_name,
-      country: leagueInfo.country || 'Global',
-      league: leagueInfo.league_name || 'League',
+      manager: managerName,
+      country: leagueInfo.country || 'Country unavailable',
+      league: leagueInfo.league_name || 'Competition unavailable',
     };
 
     return NextResponse.json({
       success: true,
       team: formattedTeam,
-      players: playersRes.rows,
+      players: squad.players,
+      squadMeta: squad.meta,
       matches: matches,
       stats: stats,
       trophies: trophiesRes.rows,

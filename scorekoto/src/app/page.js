@@ -5,6 +5,7 @@ import DateSelector from "@/components/DateSelector";
 import MatchTypeSelector from "@/components/MatchTypeSelector";
 import LeagueMatchGroup from "@/components/LeagueMatchGroup";
 import NewsSidebar from "@/components/NewsSidebar";
+import Icon from "@/components/Icon";
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState("today");
@@ -98,7 +99,7 @@ export default function Home() {
               <h2>Matches</h2>
               {lastUpdated && !loading && (
                 <span className="matches-last-updated-tag">
-                  🕒 Updated: {lastUpdated}
+                  <Icon name="clock" /> Updated: {lastUpdated}
                 </span>
               )}
             </div>
@@ -109,7 +110,7 @@ export default function Home() {
               disabled={loading || isRefreshing}
               title="Refresh live fixtures, minutes, and scores"
             >
-              <span className="refresh-icon-spin">{isRefreshing ? "⏳" : "🔄"}</span>
+              <Icon name={isRefreshing ? "loader" : "refresh"} className="refresh-icon-spin" />
               <span>{isRefreshing ? "Updating..." : "Refresh Scores"}</span>
             </button>
           </div>
@@ -127,7 +128,7 @@ export default function Home() {
           {/* API Notification / Status Message */}
           {apiLimitHit && (
             <div className="live-api-banner">
-              <span className="banner-icon">ℹ️</span>
+              <Icon name="info" className="banner-icon" />
               <p>
                 {apiMessage ||
                   "Live match API quota limit reached. Displaying fixtures and matches from our PostgreSQL database."}
@@ -139,7 +140,7 @@ export default function Home() {
           {loading ? (
             <div className="matches-loading-container">
               <div className="matches-loading-spinner"></div>
-              <h3>⚡ Loading Matches & Fixtures...</h3>
+              <h3><Icon name="bolt" /> Loading Matches & Fixtures...</h3>
               <p>Retrieving real-time match events, minutes, and league standings</p>
             </div>
           ) : (
@@ -169,7 +170,10 @@ export default function Home() {
 
                 return (
                   <>
-                    <h2>{selectedView.title}</h2>
+                    <div className="matches-view-heading">
+                      <h2>{selectedView.title}</h2>
+                      <span>{selectedView.matches.length}</span>
+                    </div>
                     {Object.entries(selectedView.groupedMatches).map(([league, leagueMatches]) => (
                       <LeagueMatchGroup
                         key={league}

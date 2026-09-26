@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
+import Icon, { ReactionIcon } from "./Icon";
 
 const REACTIONS = [
   { emoji: "🔥", label: "Fire" },
@@ -117,7 +118,7 @@ export default function MatchReactions({ matchId }) {
   return (
     <section className="match-reactions-container">
       <div className="reactions-header">
-        <h2>💬 Match Reactions & Fan Discussion</h2>
+        <h2><Icon name="message" /> Match Reactions & Fan Discussion</h2>
         <span className="reactions-count-badge">
           {comments.length} {comments.length === 1 ? "reaction" : "reactions"}
         </span>
@@ -136,7 +137,7 @@ export default function MatchReactions({ matchId }) {
                 onClick={() => setSelectedReaction(r.emoji)}
                 title={r.label}
               >
-                <span>{r.emoji}</span>
+                <ReactionIcon reaction={r.emoji} />
               </button>
             ))}
           </div>
@@ -169,13 +170,13 @@ export default function MatchReactions({ matchId }) {
           />
         </div>
 
-        {error && <div className="reaction-error-msg">⚠️ {error}</div>}
+        {error && <div className="reaction-error-msg"><Icon name="alert" /> {error}</div>}
 
         <div className="reaction-form-footer">
           {user ? (
             <span className="user-posting-tag">
-              👤 Posting as <strong>@{user.username}</strong>
-              {user.role === "admin" && <span className="admin-badge-mini">🛡️ Admin</span>}
+              <Icon name="user" /> Posting as <strong>@{user.username}</strong>
+              {user.role === "admin" && <span className="admin-badge-mini"><Icon name="shield" /> Admin</span>}
             </span>
           ) : (
             <span className="guest-login-hint">
@@ -188,7 +189,7 @@ export default function MatchReactions({ matchId }) {
             disabled={isSubmitting || !commentText.trim()}
             className="reaction-submit-btn"
           >
-            {isSubmitting ? "Posting..." : `Post Reaction ${selectedReaction}`}
+            {isSubmitting ? "Posting..." : <>Post Reaction <ReactionIcon reaction={selectedReaction} /></>}
           </button>
         </div>
       </form>
@@ -199,7 +200,7 @@ export default function MatchReactions({ matchId }) {
           <p className="reactions-loading">Loading live reactions from database...</p>
         ) : comments.length === 0 ? (
           <div className="reactions-empty">
-            <span className="empty-icon">⚽</span>
+            <span className="empty-icon"><Icon name="football" /></span>
             <p>No reactions yet. Be the first to share your thoughts on this match!</p>
           </div>
         ) : (
@@ -212,7 +213,7 @@ export default function MatchReactions({ matchId }) {
                 <div key={c.comment_id} className="comment-bubble">
                   <div className="comment-top">
                     <div className="comment-author-info">
-                      <span className="comment-reaction-emoji">{c.reaction || "⚽"}</span>
+                      <span className="comment-reaction-emoji"><ReactionIcon reaction={c.reaction || "⚽"} /></span>
                       <strong className="comment-username">
                         {c.username}
                       </strong>
@@ -220,7 +221,7 @@ export default function MatchReactions({ matchId }) {
 
                     <div className="comment-meta">
                       <span className="comment-timestamp">
-                        🕒 {formatTimestamp(c.created_at)}
+                        <Icon name="clock" /> {formatTimestamp(c.created_at)}
                       </span>
 
                       {canDelete && (
@@ -230,7 +231,7 @@ export default function MatchReactions({ matchId }) {
                           className="comment-delete-btn"
                           title="Delete reaction"
                         >
-                          🗑️
+                          <Icon name="trash" />
                         </button>
                       )}
                     </div>

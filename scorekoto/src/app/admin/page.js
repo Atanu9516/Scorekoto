@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Icon from "@/components/Icon";
 
 function getItemId(item, tab) {
   if (!item) return null;
@@ -79,11 +80,11 @@ export default function AdminPage() {
       setFormData({
         first_name: item.first_name || "",
         last_name: item.last_name || "",
-        primary_position: item.primary_position || "Midfielder",
+        primary_position: item.primary_position || "",
         nationality: item.nationality || "",
         date_of_birth: item.date_of_birth ? new Date(item.date_of_birth).toISOString().slice(0, 10) : "",
-        market_value_euros: item.market_value_euros ?? 0,
-        weight_cm: item.weight_cm ?? 0,
+        market_value_euros: item.market_value_euros ?? "",
+        weight_cm: item.weight_cm ?? "",
         photo_url: item.photo_url || "",
         team_id: item.team_id ?? (options.teams[0]?.team_id || 1),
       });
@@ -101,13 +102,13 @@ export default function AdminPage() {
         home_team_id: options.teams[0]?.team_id || "",
         away_team_id: options.teams[1]?.team_id || options.teams[0]?.team_id || "",
         season_id: options.seasons[0]?.season_id || "",
-        home_score: 0,
-        away_score: 0,
-        status: "UPCOMING",
+        home_score: "",
+        away_score: "",
+        status: "NS",
         venue: "",
         match_date: new Date().toISOString().slice(0, 16),
-        home_possession: 50,
-        away_possession: 50,
+        home_possession: "",
+        away_possession: "",
       });
     } else if (activeTab === "teams") {
       setFormData({
@@ -122,11 +123,11 @@ export default function AdminPage() {
       setFormData({
         first_name: "",
         last_name: "",
-        primary_position: "Midfielder",
+        primary_position: "",
         nationality: "",
         date_of_birth: "",
-        market_value_euros: 0,
-        weight_cm: 0,
+        market_value_euros: "",
+        weight_cm: "",
         photo_url: "",
         team_id: options.teams[0]?.team_id || "",
       });
@@ -196,7 +197,7 @@ export default function AdminPage() {
           const newId = getItemId(createdEntity, activeTab);
           setStatusMessage({
             type: "success",
-            text: `✓ New ${activeTab.slice(0, -1).toUpperCase()} ID #${newId} successfully created in PostgreSQL database!`,
+            text: `New ${activeTab.slice(0, -1).toUpperCase()} ID #${newId} successfully created in PostgreSQL database!`,
           });
 
           // Prepend to items list and select it
@@ -224,7 +225,7 @@ export default function AdminPage() {
         } else {
           setStatusMessage({
             type: "success",
-            text: `✓ ${activeTab.slice(0, -1).toUpperCase()} ID #${id} successfully updated in PostgreSQL database!`,
+            text: `${activeTab.slice(0, -1).toUpperCase()} ID #${id} successfully updated in PostgreSQL database!`,
           });
           // Update item in local list
           setItems((prev) =>
@@ -253,10 +254,10 @@ export default function AdminPage() {
     return (
       <main className="admin-page">
         <div className="admin-denied-box">
-          <div className="denied-icon">🛡️</div>
+          <div className="denied-icon"><Icon name="shield" /></div>
           <h2>Administrator Access Required</h2>
           <p>
-            You must be logged in with an administrator account to view and modify the Scorekoto PostgreSQL database.
+            You must be logged in with an administrator account to view and modify the Scoreকত? PostgreSQL database.
           </p>
           <div className="denied-actions">
             <Link href="/login" className="admin-login-btn">
@@ -276,7 +277,7 @@ export default function AdminPage() {
       {/* ADMIN HEADER */}
       <section className="admin-header-section">
         <div>
-          <span className="admin-badge-pill">🛡️ PostgreSQL Administrator Portal</span>
+          <span className="admin-badge-pill"><Icon name="shield" /> PostgreSQL Administrator Portal</span>
           <h1>Database Management Console</h1>
           <p>Direct SQL modification and record creation access for matches, teams, and players</p>
         </div>
@@ -298,7 +299,7 @@ export default function AdminPage() {
             setSelectedItem(null);
           }}
         >
-          ⚽ Matches ({activeTab === "matches" && items.length > 0 ? `${items.length} viewed` : "10,526 in DB"})
+          <Icon name="football" /> Matches ({activeTab === "matches" && items.length > 0 ? `${items.length} viewed` : "10,526 in DB"})
         </button>
 
         <button
@@ -310,7 +311,7 @@ export default function AdminPage() {
             setSelectedItem(null);
           }}
         >
-          🛡️ Teams ({activeTab === "teams" && items.length > 0 ? `${items.length} viewed` : "462 in DB"})
+          <Icon name="shield" /> Teams ({activeTab === "teams" && items.length > 0 ? `${items.length} viewed` : "462 in DB"})
         </button>
 
         <button
@@ -322,7 +323,7 @@ export default function AdminPage() {
             setSelectedItem(null);
           }}
         >
-          🏃 Players ({activeTab === "players" && items.length > 0 ? `${items.length} viewed` : "6,993 in DB"})
+          <Icon name="player" /> Players ({activeTab === "players" && items.length > 0 ? `${items.length} viewed` : "6,993 in DB"})
         </button>
       </div>
 
@@ -336,7 +337,7 @@ export default function AdminPage() {
             onClick={startCreating}
             className="admin-create-trigger-btn"
           >
-            <span>✨</span> + Create New {activeTab === "matches" ? "Match" : activeTab === "teams" ? "Team" : "Player"}
+            <Icon name="sparkles" /> Create New {activeTab === "matches" ? "Match" : activeTab === "teams" ? "Team" : "Player"}
           </button>
 
           <div className="admin-search-box">
@@ -424,7 +425,7 @@ export default function AdminPage() {
             <form onSubmit={handleSave} className="admin-edit-form">
               <div className="editor-top-bar">
                 <h2>
-                  ✨ Create New {activeTab === "matches" ? "Match" : activeTab === "teams" ? "Team" : "Player"} in PostgreSQL
+                  <Icon name="sparkles" /> Create New {activeTab === "matches" ? "Match" : activeTab === "teams" ? "Team" : "Player"} in PostgreSQL
                 </h2>
 
                 <div className="editor-actions-group">
@@ -443,14 +444,14 @@ export default function AdminPage() {
                     disabled={isSaving}
                     className="admin-save-btn"
                   >
-                    {isSaving ? "Creating..." : `✨ Create ${activeTab.slice(0, -1).toUpperCase()}`}
+                    {isSaving ? "Creating..." : <><Icon name="sparkles" /> Create {activeTab.slice(0, -1).toUpperCase()}</>}
                   </button>
                 </div>
               </div>
 
               {statusMessage.text && (
                 <div className={`admin-status-banner ${statusMessage.type}`}>
-                  {statusMessage.text}
+                  <Icon name={statusMessage.type === "success" ? "check" : "alert"} /> {statusMessage.text}
                 </div>
               )}
 
@@ -690,9 +691,10 @@ export default function AdminPage() {
                   <div className="form-group">
                     <label>Primary Position</label>
                     <select
-                      value={formData.primary_position || "Midfielder"}
+                      value={formData.primary_position || ""}
                       onChange={(e) => handleInputChange("primary_position", e.target.value)}
                     >
+                      <option value="">-- Not recorded --</option>
                       <option value="Goalkeeper">Goalkeeper</option>
                       <option value="Defender">Defender</option>
                       <option value="Midfielder">Midfielder</option>
@@ -757,7 +759,7 @@ export default function AdminPage() {
                NO ITEM SELECTED
                ============================================================ */
             <div className="admin-no-selection">
-              <span className="icon">👈</span>
+              <span className="icon"><Icon name="arrowLeft" /></span>
               <p>Select a record from the left panel to edit its attributes, or click <strong>&quot;+ Create New&quot;</strong> to add a new record.</p>
               <button
                 type="button"
@@ -792,14 +794,14 @@ export default function AdminPage() {
                     disabled={isSaving}
                     className="admin-save-btn"
                   >
-                    {isSaving ? "Saving to PostgreSQL..." : "💾 Save Changes to Database"}
+                    {isSaving ? "Saving to PostgreSQL..." : <><Icon name="save" /> Save Changes to Database</>}
                   </button>
                 </div>
               </div>
 
               {statusMessage.text && (
                 <div className={`admin-status-banner ${statusMessage.type}`}>
-                  {statusMessage.text}
+                  <Icon name={statusMessage.type === "success" ? "check" : "alert"} /> {statusMessage.text}
                 </div>
               )}
 
@@ -974,9 +976,10 @@ export default function AdminPage() {
                   <div className="form-group">
                     <label>Primary Position</label>
                     <select
-                      value={formData.primary_position || "Midfielder"}
+                      value={formData.primary_position || ""}
                       onChange={(e) => handleInputChange("primary_position", e.target.value)}
                     >
+                      <option value="">-- Not recorded --</option>
                       <option value="Goalkeeper">Goalkeeper</option>
                       <option value="Defender">Defender</option>
                       <option value="Midfielder">Midfielder</option>

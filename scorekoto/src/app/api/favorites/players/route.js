@@ -14,8 +14,8 @@ async function resolvePlayerId(identifier) {
   const normalized = String(identifier).trim().toLowerCase();
   const res = await pool.query(
     `SELECT player_id FROM player 
-     WHERE LOWER(REPLACE(CONCAT(first_name, ' ', last_name), ' ', '-')) = $1 
-        OR LOWER(CONCAT(first_name, ' ', last_name)) = $1 
+     WHERE LOWER(REPLACE(CONCAT_WS(' ', first_name, NULLIF(BTRIM(last_name), '')), ' ', '-')) = $1
+        OR LOWER(CONCAT_WS(' ', first_name, NULLIF(BTRIM(last_name), ''))) = $1
         OR LOWER(last_name) = $1
      LIMIT 1`,
     [normalized]
@@ -41,13 +41,13 @@ export async function GET(request) {
       const query = `
         SELECT 
           p.player_id,
-          CONCAT(p.first_name, ' ', p.last_name) as name,
+          CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), '')) as name,
           p.first_name,
           p.last_name,
           p.primary_position as position,
           p.nationality,
           p.photo_url as photo,
-          LOWER(REPLACE(CONCAT(p.first_name, ' ', p.last_name), ' ', '-')) as slug,
+          LOWER(REPLACE(CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), '')), ' ', '-')) as slug,
           t.team_id,
           t.name as team_name,
           t.logo_url as team_logo
@@ -55,8 +55,8 @@ export async function GET(request) {
         LEFT JOIN team t ON p.team_id = t.team_id
         WHERE (array_length($1::int[], 1) IS NOT NULL AND p.player_id = ANY($1::int[]))
            OR (array_length($2::text[], 1) IS NOT NULL AND (
-                LOWER(REPLACE(CONCAT(p.first_name, ' ', p.last_name), ' ', '-')) = ANY($2::text[])
-             OR LOWER(CONCAT(p.first_name, ' ', p.last_name)) = ANY($2::text[])
+                LOWER(REPLACE(CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), '')), ' ', '-')) = ANY($2::text[])
+             OR LOWER(CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), ''))) = ANY($2::text[])
              OR LOWER(p.last_name) = ANY($2::text[])
            ))
         ORDER BY p.last_name ASC;
@@ -78,13 +78,13 @@ export async function GET(request) {
     const query = `
       SELECT 
         p.player_id,
-        CONCAT(p.first_name, ' ', p.last_name) as name,
+        CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), '')) as name,
         p.first_name,
         p.last_name,
         p.primary_position as position,
         p.nationality,
         p.photo_url as photo,
-        LOWER(REPLACE(CONCAT(p.first_name, ' ', p.last_name), ' ', '-')) as slug,
+        LOWER(REPLACE(CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), '')), ' ', '-')) as slug,
         t.team_id,
         t.name as team_name,
         t.logo_url as team_logo

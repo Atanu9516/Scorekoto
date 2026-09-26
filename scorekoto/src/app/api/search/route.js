@@ -39,16 +39,16 @@ export async function GET(request) {
       const playersRes = await pool.query(
         `SELECT 
            p.player_id as id,
-           CONCAT(p.first_name, ' ', p.last_name) as name,
+           CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), '')) as name,
            p.primary_position as position,
            p.nationality,
            p.photo_url as photo,
-           LOWER(REPLACE(CONCAT(p.first_name, ' ', p.last_name), ' ', '-')) as slug,
+           LOWER(REPLACE(CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), '')), ' ', '-')) as slug,
            t.name as team_name,
            t.logo_url as team_logo
          FROM player p
          LEFT JOIN team t ON p.team_id = t.team_id
-         WHERE LOWER(CONCAT(p.first_name, ' ', p.last_name)) LIKE $1
+         WHERE LOWER(CONCAT_WS(' ', p.first_name, NULLIF(BTRIM(p.last_name), ''))) LIKE $1
             OR LOWER(p.last_name) LIKE $1
             OR LOWER(p.nationality) LIKE $1
          ORDER BY p.last_name ASC

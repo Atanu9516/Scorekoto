@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Icon from "./Icon";
 
 export default function NewsSidebar() {
   const [newsList, setNewsList] = useState([]);
@@ -70,7 +71,7 @@ export default function NewsSidebar() {
                   color: "var(--foreground)",
                 }}
               >
-                ⚽
+                <Icon name="football" />
               </div>
             )}
 

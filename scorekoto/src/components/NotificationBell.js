@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Icon from "./Icon";
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -40,7 +41,7 @@ export default function NotificationBell() {
         onClick={() => setOpen(!open)}
         aria-label="Notifications"
       >
-        🔔
+        <Icon name="bell" />
         {unreadCount > 0 && (
           <span className="notification-count">{unreadCount}</span>
         )}
@@ -91,8 +92,8 @@ export default function NotificationBell() {
 }
 
 function getIcon(type) {
-  if (type === "goal") return "⚽";
-  if (type === "live") return "🔴";
-  if (type === "upcoming") return "⏰";
-  return "🏁";
+  if (type === "goal") return <Icon name="football" />;
+  if (type === "live") return <span className="notification-live-dot" aria-hidden="true" />;
+  if (type === "upcoming") return <Icon name="clock" />;
+  return <Icon name="flag" />;
 }

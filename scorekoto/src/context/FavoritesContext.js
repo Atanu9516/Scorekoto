@@ -113,17 +113,20 @@ export function FavoritesProvider({ children }) {
       try {
         if (alreadyFavorite) {
           // DELETE from database
-          await fetch(`/api/favorites/teams?teamId=${encodeURIComponent(id)}`, {
+          const response = await fetch(`/api/favorites/teams?teamId=${encodeURIComponent(id)}`, {
             method: "DELETE",
           });
+          if (!response.ok) throw new Error("Failed to remove favorite team");
         } else {
           // POST to database
-          await fetch("/api/favorites/teams", {
+          const response = await fetch("/api/favorites/teams", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ teamSlug: id, teamId: id }),
           });
+          if (!response.ok) throw new Error("Failed to add favorite team");
         }
+        window.dispatchEvent(new Event("scorekoto:favorites-updated"));
       } catch (err) {
         console.error("Failed to update favorite in database:", err);
       }

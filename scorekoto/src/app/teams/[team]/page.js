@@ -1,7 +1,10 @@
 import pool from "@/app/lib/db";
 import TeamTabs from "@/components/TeamTabs";
 import FavoriteButton from "@/components/FavoriteButton";
+import { getTeamManagerName } from "@/app/lib/team-manager";
+import { getTeamSquad } from "@/app/lib/team-squad";
 import Link from "next/link";
+import Icon from "@/components/Icon";
 
 async function getTeamDataFromDb(teamParam) {
   try {
@@ -33,6 +36,7 @@ async function getTeamDataFromDb(teamParam) {
 
     const teamRow = teamRes.rows[0];
     const teamId = teamRow.team_id;
+    const managerNamePromise = getTeamManagerName(teamId, teamRow.manager_name);
 
     // 2. Query League / Country info
     const leagueQuery = `
@@ -41,38 +45,21 @@ async function getTeamDataFromDb(teamParam) {
       JOIN season s ON m.season_id = s.season_id
       JOIN league l ON s.league_id = l.league_id
       WHERE m.home_team_id = $1 OR m.away_team_id = $1
-      ORDER BY m.match_date DESC
+      GROUP BY l.league_id, l.name, l.country
+      ORDER BY
+        CASE WHEN LOWER(COALESCE(l.country, 'world')) = 'world' THEN 1 ELSE 0 END,
+        MAX(m.match_date) DESC,
+        COUNT(*) DESC
       LIMIT 1;
     `;
     const leagueRes = await pool.query(leagueQuery, [teamId]);
     const leagueInfo = leagueRes.rows[0] || {};
 
-    // 3. Query Squad / Players
-    const playersQuery = `
-      SELECT 
-        player_id as id,
-        CONCAT(first_name, ' ', last_name) as name,
-        first_name,
-        last_name,
-        primary_position as position,
-        nationality,
-        photo_url as photo,
-        LOWER(REPLACE(CONCAT(first_name, ' ', last_name), ' ', '-')) as slug
-      FROM player
-      WHERE team_id = $1
-      ORDER BY 
-        CASE primary_position
-          WHEN 'Goalkeeper' THEN 1
-          WHEN 'Defender' THEN 2
-          WHEN 'Midfielder' THEN 3
-          WHEN 'Forward' THEN 4
-          ELSE 5
-        END,
-        last_name ASC;
-    `;
-    const playersRes = await pool.query(playersQuery, [teamId]);
+    // 3. Query the verified current-squad snapshot. Player.team_id cannot
+    // represent both club and national-team membership accurately.
+    const squadPromise = getTeamSquad(teamId);
 
-    // 4. Query Matches with LEFT JOINs so newly finished/custom matches are never dropped
+    // 4. Query every stored match for this exact team ID.
     const matchesQuery = `
       SELECT 
         m.match_id as id,
@@ -80,81 +67,31 @@ async function getTeamDataFromDb(teamParam) {
         m.match_date as "matchDate",
         m.home_score as "homeScore",
         m.away_score as "awayScore",
-        COALESCE(ht.name, 'Home Team') as "homeTeam",
+        ht.name as "homeTeam",
         ht.logo_url as "homeLogo",
-        COALESCE(at.name, 'Away Team') as "awayTeam",
+        at.name as "awayTeam",
         at.logo_url as "awayLogo",
-        COALESCE(l.name, 'Football League') as league
+        l.name as league
       FROM match m
-      LEFT JOIN team ht ON m.home_team_id = ht.team_id
-      LEFT JOIN team at ON m.away_team_id = at.team_id
-      LEFT JOIN season s ON m.season_id = s.season_id
-      LEFT JOIN league l ON s.league_id = l.league_id
+      JOIN team ht ON m.home_team_id = ht.team_id
+      JOIN team at ON m.away_team_id = at.team_id
+      JOIN season s ON m.season_id = s.season_id
+      JOIN league l ON s.league_id = l.league_id
       WHERE m.home_team_id = $1 OR m.away_team_id = $1
-         OR LOWER(ht.name) = LOWER($2) OR LOWER(at.name) = LOWER($2)
-      ORDER BY m.match_date DESC
-      LIMIT 60;
+      ORDER BY m.match_date DESC;
     `;
-    const matchesRes = await pool.query(matchesQuery, [teamId, teamRow.name]);
-    let matches = matchesRes.rows;
+    const matchesRes = await pool.query(matchesQuery, [teamId]);
+    const matches = matchesRes.rows;
 
-    // 4b. Ensure upcoming fixtures are available for every team
-    const hasUpcoming = matches.some(
-      (m) => m.status === 'UPCOMING' || m.status === 'NS' || m.status === 'TBD'
+    const trophiesRes = await pool.query(
+      `SELECT tt.season_won, tr.name, tr.type
+       FROM team_trophy tt
+       JOIN trophy tr ON tr.trophy_id = tt.trophy_id
+       WHERE tt.team_id = $1
+       ORDER BY tt.season_won DESC, tr.name ASC`,
+      [teamId]
     );
-
-    if (!hasUpcoming) {
-      // Find league rivals to generate upcoming fixtures
-      try {
-        const rivalRes = await pool.query(
-          `SELECT DISTINCT t.team_id, t.name, t.logo_url, t.stadium_name
-           FROM team t
-           JOIN match m ON (m.home_team_id = t.team_id OR m.away_team_id = t.team_id)
-           WHERE (m.home_team_id = $1 OR m.away_team_id = $1)
-             AND t.team_id != $1
-           LIMIT 5`,
-          [teamId]
-        );
-
-        if (rivalRes.rows.length > 0) {
-          const rivals = rivalRes.rows;
-          const now = new Date();
-          const upcomingList = rivals.slice(0, 4).map((rival, index) => {
-            const matchDate = new Date(now.getTime() + (index + 1) * 7 * 24 * 60 * 60 * 1000);
-            const isHome = index % 2 === 0;
-            return {
-              id: teamId * 10000 + rival.team_id + index,
-              status: 'UPCOMING',
-              matchDate: matchDate.toISOString(),
-              homeScore: null,
-              awayScore: null,
-              homeTeam: isHome ? teamRow.name : rival.name,
-              homeLogo: isHome ? teamRow.logo_url : rival.logo_url,
-              awayTeam: isHome ? rival.name : teamRow.name,
-              awayLogo: isHome ? rival.logo_url : teamRow.logo_url,
-              league: leagueInfo.league_name || 'Football League',
-            };
-          });
-
-          // Save upcoming fixtures to database
-          for (const uf of upcomingList) {
-            const hId = uf.homeTeam === teamRow.name ? teamId : uf.id % 1000;
-            const aId = uf.awayTeam === teamRow.name ? teamId : uf.id % 1000;
-            try {
-              await pool.query(
-                `INSERT INTO match (match_id, season_id, home_team_id, away_team_id, match_date, venue, status, home_score, away_score)
-                 VALUES ($1, $2, $3, $4, $5, $6, 'UPCOMING', null, null)
-                 ON CONFLICT (match_id) DO NOTHING`,
-                [uf.id, 1, hId, aId, uf.matchDate, teamRow.stadium_name || 'Stadium']
-              );
-            } catch (err) {}
-            matches.unshift(uf);
-          }
-        }
-      } catch (e) {
-        console.warn('Could not populate upcoming team fixtures:', e.message);
-      }
-    }
+    const [managerName, squad] = await Promise.all([managerNamePromise, squadPromise]);
 
     // 5. Calculate Real Stats from Completed Matches
     const completedMatches = matches.filter(
@@ -188,21 +125,21 @@ async function getTeamDataFromDb(teamParam) {
       name: teamRow.name,
       slug: teamRow.name.toLowerCase().replaceAll(" ", "-"),
       shortName: teamRow.short_name || teamRow.name.substring(0, 3).toUpperCase(),
-      stadium: teamRow.stadium_name || "Stadium",
-      founded: "—",
-      country: leagueInfo.country || "Global",
-      league: leagueInfo.league_name || "Football League",
+      stadium: teamRow.stadium_name || "Venue unavailable",
+      country: leagueInfo.country || "Country unavailable",
+      league: leagueInfo.league_name || "Competition unavailable",
+      manager: managerName || "Manager unavailable",
+      history: teamRow.history || null,
       logo: teamRow.logo_url,
     };
 
     return {
       team: teamData,
-      players: playersRes.rows.map((p, idx) => ({
-        ...p,
-        number: idx + 1,
-      })),
+      players: squad.players,
+      squadMeta: squad.meta,
       matches: matches,
       stats: stats,
+      trophies: trophiesRes.rows,
     };
   } catch (err) {
     console.error("Database query error in TeamPage:", err);
@@ -236,7 +173,7 @@ export default async function TeamPage({ params }) {
               textDecoration: "none",
             }}
           >
-            ← Browse Teams
+            <Icon name="arrowLeft" /> Browse Teams
           </Link>
         </div>
       </main>
@@ -246,7 +183,9 @@ export default async function TeamPage({ params }) {
   const teamData = dbData.team;
   const teamMatches = dbData.matches || [];
   const teamPlayers = dbData.players || [];
+  const squadMeta = dbData.squadMeta || { status: "not_synced", playerCount: 0 };
   const teamStats = dbData.stats || { played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 };
+  const teamTrophies = dbData.trophies || [];
 
   return (
     <main className="team-page">
@@ -259,7 +198,7 @@ export default async function TeamPage({ params }) {
             className="team-page-logo"
           />
         ) : (
-          <div className="team-logo">⚽</div>
+          <div className="team-logo"><Icon name="football" /></div>
         )}
 
         <div>
@@ -283,6 +222,8 @@ export default async function TeamPage({ params }) {
         players={teamPlayers}
         teamStats={teamStats}
         stats={teamStats}
+        teamTrophies={teamTrophies}
+        squadMeta={squadMeta}
       />
     </main>
   );

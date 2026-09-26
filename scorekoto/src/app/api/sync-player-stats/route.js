@@ -1,113 +1,77 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
+import { fetchLeagueTopScorers } from '../../lib/league-season-data';
 
 export const dynamic = 'force-dynamic';
 
 // Populates genuine player season performance metrics (appearances, goals, assists, cards) from official sources
-export async function GET() {
+export async function GET(request) {
   try {
     const API_KEY = process.env.API_SPORTS_KEY;
     if (!API_KEY) {
       return NextResponse.json({ success: false, error: 'API_SPORTS_KEY not configured' }, { status: 500 });
     }
 
+    const requestedSeason = Number(new URL(request.url).searchParams.get('season'));
+    const now = new Date();
+    const season = Number.isInteger(requestedSeason) && requestedSeason > 2000
+      ? requestedSeason
+      : (now.getUTCMonth() >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1);
+    const year = `${season}-${season + 1}`;
     const majorLeagues = [
-      { id: 39, name: 'Premier League', season: 2023, year: '2023-2024' },
-      { id: 140, name: 'La Liga', season: 2023, year: '2023-2024' },
-      { id: 78, name: 'Bundesliga', season: 2023, year: '2023-2024' },
-      { id: 135, name: 'Serie A', season: 2023, year: '2023-2024' },
-      { id: 61, name: 'Ligue 1', season: 2023, year: '2023-2024' },
-      { id: 2, name: 'Champions League', season: 2023, year: '2023-2024' }
+      { id: 39, name: 'Premier League', season, year },
+      { id: 140, name: 'La Liga', season, year },
+      { id: 78, name: 'Bundesliga', season, year },
+      { id: 135, name: 'Serie A', season, year },
+      { id: 61, name: 'Ligue 1', season, year },
+      { id: 2, name: 'UEFA Champions League', season, year }
     ];
 
     let totalSynced = 0;
 
     for (const l of majorLeagues) {
       try {
-        const res = await fetch(`https://v3.football.api-sports.io/players/topscorers?league=${l.id}&season=${l.season}`, {
-          headers: { 'x-apisports-key': API_KEY }
-        });
-        if (!res.ok) continue;
-
-        const data = await res.json();
-        const scorers = data.response || [];
-
         const seasonRes = await pool.query(
-          'SELECT season_id FROM season WHERE league_id = $1 AND year = $2 LIMIT 1',
+          `SELECT season_id, end_date
+           FROM season
+           WHERE league_id = $1 AND year = $2
+           ORDER BY season_id DESC
+           LIMIT 1`,
           [l.id, l.year]
         );
         if (seasonRes.rows.length === 0) continue;
-        const seasonId = seasonRes.rows[0].season_id;
+        const { season_id: seasonId, end_date: seasonEndDate } = seasonRes.rows[0];
+        const maxMatchesRes = await pool.query(
+          `WITH team_matches AS (
+             SELECT home_team_id AS team_id, COUNT(*)::int AS played
+             FROM match
+             WHERE season_id = $1 AND status IN ('FT', 'AET', 'PEN')
+             GROUP BY home_team_id
 
-        for (const item of scorers) {
-          const p = item.player;
-          const s = item.statistics[0];
-          if (!p || !s) continue;
+             UNION ALL
 
-          const teamId = s.team?.id;
-          if (teamId) {
-            await pool.query(`
-              INSERT INTO team (team_id, name, short_name, logo_url)
-              VALUES ($1, $2, $3, $4)
-              ON CONFLICT (team_id) DO UPDATE SET
-                name = EXCLUDED.name,
-                logo_url = COALESCE(EXCLUDED.logo_url, team.logo_url);
-            `, [teamId, s.team.name, s.team.name.substring(0, 3).toUpperCase(), s.team.logo]);
-          }
+             SELECT away_team_id AS team_id, COUNT(*)::int AS played
+             FROM match
+             WHERE season_id = $1 AND status IN ('FT', 'AET', 'PEN')
+             GROUP BY away_team_id
+           )
+           SELECT COALESCE(MAX(played), 0)::int AS max_appearances
+           FROM (
+             SELECT team_id, SUM(played)::int AS played
+             FROM team_matches
+             GROUP BY team_id
+           ) totals`,
+          [seasonId]
+        );
+        const maxAppearances = maxMatchesRes.rows[0]?.max_appearances || 0;
+        const scorers = await fetchLeagueTopScorers(
+          l.id,
+          seasonId,
+          l.season,
+          { maxAppearances, seasonEndDate }
+        );
 
-          const [firstName, ...lastNames] = (p.name || 'Player').split(' ');
-          const lastName = lastNames.join(' ') || p.lastname || firstName;
-
-          await pool.query(`
-            INSERT INTO player (
-              player_id, team_id, first_name, last_name, primary_position, 
-              nationality, date_of_birth, weight_cm, photo_url
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ON CONFLICT (player_id) DO UPDATE SET
-              first_name = EXCLUDED.first_name,
-              last_name = EXCLUDED.last_name,
-              team_id = COALESCE(EXCLUDED.team_id, player.team_id),
-              primary_position = EXCLUDED.primary_position,
-              nationality = EXCLUDED.nationality,
-              photo_url = COALESCE(EXCLUDED.photo_url, player.photo_url);
-          `, [
-            p.id,
-            teamId,
-            firstName,
-            lastName,
-            s.games.position || 'Forward',
-            p.nationality || 'International',
-            p.birth?.date || null,
-            parseInt(p.weight || '75', 10),
-            p.photo
-          ]);
-
-          await pool.query(`
-            INSERT INTO player_season_stats (
-              player_id, season_id, appearances, minutes_played, goals, assists, yellow_cards, red_cards
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (player_id, season_id) DO UPDATE SET
-              appearances = EXCLUDED.appearances,
-              minutes_played = EXCLUDED.minutes_played,
-              goals = EXCLUDED.goals,
-              assists = EXCLUDED.assists,
-              yellow_cards = EXCLUDED.yellow_cards,
-              red_cards = EXCLUDED.red_cards;
-          `, [
-            p.id,
-            seasonId,
-            s.games.appearences || 0,
-            s.games.minutes || 0,
-            s.goals.total || 0,
-            s.goals.assists || 0,
-            s.cards.yellow || 0,
-            s.cards.red || 0
-          ]);
-
-          totalSynced++;
-        }
+        totalSynced += scorers.length;
       } catch (err) {
         console.warn(`Error syncing stats for ${l.name}:`, err.message);
       }

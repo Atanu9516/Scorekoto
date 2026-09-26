@@ -137,22 +137,35 @@ export async function GET() {
             await pool.query(`
               INSERT INTO Team (Team_ID, Name, Short_Name, Stadium_Name, logo_url)
               VALUES ($1, $2, $3, $4, $5)
-              ON CONFLICT (Team_ID) DO NOTHING;
+              ON CONFLICT (Team_ID) DO UPDATE SET
+                Name = EXCLUDED.Name,
+                Short_Name = EXCLUDED.Short_Name,
+                Stadium_Name = COALESCE(EXCLUDED.Stadium_Name, Team.Stadium_Name),
+                logo_url = COALESCE(EXCLUDED.logo_url, Team.logo_url);
             `, [teams.home.id, teams.home.name, teams.home.name.slice(0, 3).toUpperCase(), fixture.venue ? fixture.venue.name : null, teams.home.logo]).catch(() => {});
 
             await pool.query(`
               INSERT INTO Team (Team_ID, Name, Short_Name, Stadium_Name, logo_url)
               VALUES ($1, $2, $3, $4, $5)
-              ON CONFLICT (Team_ID) DO NOTHING;
+              ON CONFLICT (Team_ID) DO UPDATE SET
+                Name = EXCLUDED.Name,
+                Short_Name = EXCLUDED.Short_Name,
+                Stadium_Name = COALESCE(EXCLUDED.Stadium_Name, Team.Stadium_Name),
+                logo_url = COALESCE(EXCLUDED.logo_url, Team.logo_url);
             `, [teams.away.id, teams.away.name, teams.away.name.slice(0, 3).toUpperCase(), fixture.venue ? fixture.venue.name : null, teams.away.logo]).catch(() => {});
 
             const matchQuery = `
               INSERT INTO Match (Match_ID, Season_ID, Home_Team_ID, Away_Team_ID, Match_Date, Status, Home_Score, Away_Score, Venue)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
               ON CONFLICT (Match_ID) DO UPDATE SET 
+                  Season_ID = EXCLUDED.Season_ID,
+                  Home_Team_ID = EXCLUDED.Home_Team_ID,
+                  Away_Team_ID = EXCLUDED.Away_Team_ID,
+                  Match_Date = EXCLUDED.Match_Date,
                   Status = EXCLUDED.Status,
                   Home_Score = EXCLUDED.Home_Score,
-                  Away_Score = EXCLUDED.Away_Score;
+                  Away_Score = EXCLUDED.Away_Score,
+                  Venue = EXCLUDED.Venue;
             `;
 
             await pool.query(matchQuery, [
@@ -162,8 +175,8 @@ export async function GET() {
               teams.away.id,
               fixture.date,
               fixture.status.short || 'FT',
-              goals.home !== null ? goals.home : 0,
-              goals.away !== null ? goals.away : 0,
+              goals.home ?? null,
+              goals.away ?? null,
               fixture.venue ? fixture.venue.name : null
             ]);
             totalMatchesAdded++;

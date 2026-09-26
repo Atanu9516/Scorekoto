@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
+import { hasKnownKickoffTime } from '../../lib/kickoff-time';
+import { getLineupForMatch } from '../../lib/lineups';
+import { saveMatchDetails } from '../../lib/match-details';
 
 // In-memory cache for matches by date and live fixtures
 let liveCache = {
@@ -27,8 +30,8 @@ const competitionNames = {
   307: 'Saudi Pro League',
 };
 
-function getCompetitionName(leagueId, leagueName = 'Football League') {
-  return competitionNames[Number(leagueId)] || leagueName;
+function getCompetitionName(leagueId, leagueName) {
+  return leagueName || competitionNames[Number(leagueId)] || 'Competition unavailable';
 }
 
 // Helper to get stored league IDs and names from PostgreSQL database
@@ -87,59 +90,112 @@ function getDateString(offsetDays = 0) {
   return d.toISOString().split('T')[0];
 }
 
+function mapApiStatistics(item) {
+  if (!Array.isArray(item.statistics) || item.statistics.length < 2) return null;
+  const home = item.statistics.find(
+    (entry) => Number(entry.team?.id) === Number(item.teams?.home?.id)
+  ) || item.statistics[0];
+  const away = item.statistics.find(
+    (entry) => Number(entry.team?.id) === Number(item.teams?.away?.id)
+  ) || item.statistics[1];
+  const homeMap = Object.fromEntries((home.statistics || []).map((stat) => [stat.type, stat.value]));
+  const awayMap = Object.fromEntries((away.statistics || []).map((stat) => [stat.type, stat.value]));
+  const parse = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(String(value).replace('%', '').trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const pair = (type) => [parse(homeMap[type]), parse(awayMap[type])];
+  const result = {
+    possession: pair('Ball Possession'),
+    shots: pair('Total Shots'),
+    shotsOnTarget: pair('Shots on Goal'),
+    shotsOffTarget: pair('Shots off Goal'),
+    blockedShots: pair('Blocked Shots'),
+    shotsInsideBox: pair('Shots insidebox'),
+    shotsOutsideBox: pair('Shots outsidebox'),
+    corners: pair('Corner Kicks'),
+    fouls: pair('Fouls'),
+    offsides: pair('Offsides'),
+    yellowCards: pair('Yellow Cards'),
+    redCards: pair('Red Cards'),
+    goalkeeperSaves: pair('Goalkeeper Saves'),
+    totalPasses: pair('Total passes'),
+    accuratePasses: pair('Passes accurate'),
+    passAccuracy: pair('Passes %'),
+  };
+  return Object.values(result).some((values) => values.some((value) => value !== null))
+    ? result
+    : null;
+}
+
 // Map API-Sports raw fixture to standard Scorekoto format
 function mapApiFixture(item, dateLabel = 'today') {
   const statusShort = item.fixture?.status?.short || '';
   const isFinished = ['FT', 'AET', 'PEN'].includes(statusShort);
   const isUpcoming = ['NS', 'TBD', 'TIMED'].includes(statusShort);
+  const isLive = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'SUSP', 'INT', 'LIVE'].includes(statusShort);
 
   return {
     id: item.fixture.id,
     date: dateLabel,
-    homeTeam: item.teams?.home?.name || 'Home Team',
-    awayTeam: item.teams?.away?.name || 'Away Team',
+    homeTeam: item.teams.home.name,
+    awayTeam: item.teams.away.name,
+    homeTeamId: item.teams?.home?.id || null,
+    awayTeamId: item.teams?.away?.id || null,
     homeLogo: item.teams?.home?.logo || null,
     awayLogo: item.teams?.away?.logo || null,
-    homeScore: item.goals?.home ?? (isUpcoming ? null : 0),
-    awayScore: item.goals?.away ?? (isUpcoming ? null : 0),
-    status: isFinished ? 'FT' : isUpcoming ? 'UPCOMING' : 'LIVE',
+    homeScore: item.goals?.home ?? null,
+    awayScore: item.goals?.away ?? null,
+    status: isFinished ? statusShort : isUpcoming ? 'UPCOMING' : isLive ? 'LIVE' : statusShort,
+    providerStatus: statusShort,
     minute:
       statusShort === 'HT'
         ? 'HT'
         : item.fixture?.status?.elapsed
         ? `${item.fixture.status.elapsed}'`
         : isUpcoming
-        ? 'TBD'
+        ? hasKnownKickoffTime(item.fixture?.date, statusShort) ? null : 'TBD'
         : isFinished
         ? 'FT'
-        : 'LIVE',
-      leagueId: item.league?.id || null,
+        : isLive
+        ? 'LIVE'
+        : statusShort,
+    leagueId: item.league?.id || null,
     league: getCompetitionName(item.league?.id, item.league?.name),
+    leagueSeason: item.league?.season || null,
+    leagueCountry: item.league?.country || 'World',
+    leagueLogo: item.league?.logo || null,
     matchDate: item.fixture?.date,
-    venue: item.fixture?.venue?.name || 'Stadium',
+    venue: item.fixture?.venue?.name || null,
     events: (item.events || []).map((e) => {
       const typeLower = (e.type || '').toLowerCase();
       const detailLower = (e.detail || '').toLowerCase();
       const isGoal = typeLower.includes('goal');
       const isCard = typeLower.includes('card');
-      const isSub = typeLower.includes('sub');
-      const isYellow = isCard && detailLower.includes('yellow');
+      const isSub = typeLower.includes('subst') || typeLower.includes('sub');
+      const isMissedPenalty = isGoal && detailLower.includes('missed penalty');
       const isRed = isCard && (detailLower.includes('red') || detailLower.includes('second yellow'));
+      const isYellow = isCard && detailLower.includes('yellow') && !isRed;
       const isOwn = isGoal && detailLower.includes('own');
-      const isPen = isGoal && detailLower.includes('penalty');
+      const isPen = isGoal && detailLower.includes('penalty') && !isMissedPenalty;
 
-      const eventType = isOwn
+      const eventType = isMissedPenalty
+        ? 'missed-penalty'
+        : isOwn
         ? 'own-goal'
         : isPen
         ? 'penalty-goal'
         : isGoal
         ? 'goal'
-        : isYellow
-        ? 'yellow-card'
         : isRed
         ? 'red-card'
+        : isYellow
+        ? 'yellow-card'
         : isSub
         ? 'substitution'
+        : typeLower.includes('var')
+        ? 'var'
         : 'event';
 
       return {
@@ -153,7 +209,8 @@ function mapApiFixture(item, dateLabel = 'today') {
         detail: e.detail || '',
       };
     }),
-    stats: null,
+    stats: mapApiStatistics(item),
+    rawLineups: item.lineups || null,
   };
 }
 
@@ -162,21 +219,27 @@ async function autoSaveFixturesToDb(fixtures) {
   if (!fixtures || fixtures.length === 0) return;
   try {
     for (const f of fixtures) {
-      if (!f.id) continue;
+      if (!f.id || !f.matchDate || !f.homeTeamId || !f.awayTeamId) continue;
       try {
-        // Resolve home team ID
-        const htRes = await pool.query(
-          `SELECT team_id FROM team WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-          [f.homeTeam]
-        );
-        const homeId = htRes.rows[0]?.team_id || f.id * 10 + 1;
+        let homeId = f.homeTeamId;
+        if (!homeId) {
+          const htRes = await pool.query(
+            `SELECT team_id FROM team WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+            [f.homeTeam]
+          );
+          homeId = htRes.rows[0]?.team_id;
+        }
 
-        // Resolve away team ID
-        const atRes = await pool.query(
-          `SELECT team_id FROM team WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-          [f.awayTeam]
-        );
-        const awayId = atRes.rows[0]?.team_id || f.id * 10 + 2;
+        let awayId = f.awayTeamId;
+        if (!awayId) {
+          const atRes = await pool.query(
+            `SELECT team_id FROM team WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+            [f.awayTeam]
+          );
+          awayId = atRes.rows[0]?.team_id;
+        }
+
+        if (!homeId || !awayId) continue;
 
         // Upsert teams
         await pool.query(
@@ -185,7 +248,7 @@ async function autoSaveFixturesToDb(fixtures) {
            ON CONFLICT (team_id) DO UPDATE SET
              name = EXCLUDED.name,
              logo_url = COALESCE(EXCLUDED.logo_url, team.logo_url)`,
-          [homeId, f.homeTeam, f.homeLogo, f.venue || 'Stadium']
+          [homeId, f.homeTeam, f.homeLogo, null]
         );
 
         await pool.query(
@@ -194,7 +257,7 @@ async function autoSaveFixturesToDb(fixtures) {
            ON CONFLICT (team_id) DO UPDATE SET
              name = EXCLUDED.name,
              logo_url = COALESCE(EXCLUDED.logo_url, team.logo_url)`,
-          [awayId, f.awayTeam, f.awayLogo, f.venue || 'Stadium']
+          [awayId, f.awayTeam, f.awayLogo, null]
         );
 
         // Keep the fixture attached to its actual competition instead of the first season in the database.
@@ -202,18 +265,22 @@ async function autoSaveFixturesToDb(fixtures) {
         if (f.leagueId) {
           const leagueName = getCompetitionName(f.leagueId, f.league);
           await pool.query(
-            `INSERT INTO league (league_id, name, country, type)
-             VALUES ($1, $2, 'Global', 'League')
-             ON CONFLICT (league_id) DO UPDATE SET name = EXCLUDED.name`,
-            [f.leagueId, leagueName]
+            `INSERT INTO league (league_id, name, country, type, logo_url)
+             VALUES ($1, $2, $3, 'League', $4)
+             ON CONFLICT (league_id) DO UPDATE SET
+               name = EXCLUDED.name,
+               country = EXCLUDED.country,
+               logo_url = COALESCE(EXCLUDED.logo_url, league.logo_url)`,
+            [f.leagueId, leagueName, f.leagueCountry || 'World', f.leagueLogo || null]
           );
 
-          const seasonYear = f.matchDate ? new Date(f.matchDate).getUTCFullYear() : new Date().getUTCFullYear();
+          const seasonYear = Number(f.leagueSeason);
+          if (!seasonYear) continue;
           const seasonRes = await pool.query(
             `SELECT season_id FROM season
-             WHERE league_id = $1 AND year LIKE $2
+             WHERE league_id = $1 AND SPLIT_PART(year, '-', 1) = $2
              ORDER BY season_id DESC LIMIT 1`,
-            [f.leagueId, `${seasonYear}%`]
+            [f.leagueId, String(seasonYear)]
           );
 
           if (seasonRes.rows.length > 0) {
@@ -242,22 +309,35 @@ async function autoSaveFixturesToDb(fixtures) {
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT (match_id) DO UPDATE SET
              season_id = EXCLUDED.season_id,
+             home_team_id = EXCLUDED.home_team_id,
+             away_team_id = EXCLUDED.away_team_id,
              status = EXCLUDED.status,
              home_score = EXCLUDED.home_score,
              away_score = EXCLUDED.away_score,
-             match_date = EXCLUDED.match_date`,
+             match_date = EXCLUDED.match_date,
+             venue = EXCLUDED.venue`,
           [
             f.id,
             seasonId,
             homeId,
             awayId,
-            f.matchDate || new Date(),
-            f.venue || 'Stadium',
-            f.status || 'FT',
+            f.matchDate,
+            f.venue || null,
+            f.status,
             f.homeScore,
             f.awayScore,
           ]
         );
+
+        const lineup = await getLineupForMatch(f, f.rawLineups);
+        if (f.events.length > 0 || f.stats || lineup) {
+          await saveMatchDetails(f.id, {
+            events: f.events,
+            stats: f.stats,
+            lineup,
+            providerStatus: f.providerStatus,
+          });
+        }
       } catch (err) {
         // Ignore individual fixture conflict
       }
@@ -306,8 +386,18 @@ async function fetchLiveMatchesFromApi(storedLeagues, forceRefresh = false) {
     }
 
     if (data.response && Array.isArray(data.response) && data.response.length > 0) {
-      const filtered = data.response.filter((item) => storedLeagues.ids.has(item.league?.id));
+      const filtered = data.response.filter((item) =>
+        storedLeagues.ids.has(item.league?.id) &&
+        item.fixture?.id &&
+        item.fixture?.date &&
+        item.teams?.home?.id &&
+        item.teams?.away?.id &&
+        item.teams?.home?.name &&
+        item.teams?.away?.name
+      );
       const formatted = filtered.map((item) => mapApiFixture(item, 'today'));
+
+      autoSaveFixturesToDb(formatted).catch(() => {});
 
       liveCache = {
         timestamp: now,
@@ -364,11 +454,19 @@ async function fetchFixturesByDate(dateStr, dateLabel, storedLeagues, forceRefre
     }
 
     if (data.response && Array.isArray(data.response)) {
-      const filtered = data.response.filter((item) => storedLeagues.ids.has(item.league?.id));
+      const filtered = data.response.filter((item) =>
+        storedLeagues.ids.has(item.league?.id) &&
+        item.fixture?.id &&
+        item.fixture?.date &&
+        item.teams?.home?.id &&
+        item.teams?.away?.id &&
+        item.teams?.home?.name &&
+        item.teams?.away?.name
+      );
       const formatted = filtered.map((item) => mapApiFixture(item, dateLabel));
 
-      // Asynchronously auto-save completed matches into PostgreSQL
-      autoSaveFixturesToDb(formatted.filter((m) => m.status === 'FT')).catch(() => {});
+      // Preserve every provider payload so detail data is not discarded during list synchronization.
+      autoSaveFixturesToDb(formatted).catch(() => {});
 
       const result = { matches: formatted, apiLimitHit: false, message: '' };
       dateCache.set(cacheKey, { timestamp: now, ...result });
@@ -390,6 +488,7 @@ export async function GET(request) {
     const yesterdayDate = getDateString(-1);
     const todayDate = getDateString(0);
     const tomorrowDate = getDateString(1);
+    const dayAfterTomorrowDate = getDateString(2);
 
     // 1. Get stored leagues from DB
     const storedLeagues = await getStoredLeagues();
@@ -404,17 +503,17 @@ export async function GET(request) {
         m.away_score as "awayScore",
         m.home_possession as "homePossession",
         m.away_possession as "awayPossession",
-        COALESCE(ht.name, 'Home Team') as "homeTeam",
+        ht.name as "homeTeam",
         ht.logo_url as "homeLogo",
-        COALESCE(at.name, 'Away Team') as "awayTeam",
+        at.name as "awayTeam",
         at.logo_url as "awayLogo",
         l.league_id as "leagueId",
-        COALESCE(l.name, 'Premier League') as league
+        l.name as league
       FROM match m
-      LEFT JOIN team ht ON m.home_team_id = ht.team_id
-      LEFT JOIN team at ON m.away_team_id = at.team_id
-      LEFT JOIN season s ON m.season_id = s.season_id
-      LEFT JOIN league l ON s.league_id = l.league_id
+      JOIN team ht ON m.home_team_id = ht.team_id
+      JOIN team at ON m.away_team_id = at.team_id
+      JOIN season s ON m.season_id = s.season_id
+      JOIN league l ON s.league_id = l.league_id
     `;
 
     // ==========================================
@@ -459,32 +558,6 @@ export async function GET(request) {
           }
         }
 
-        // Fallback: If 0 matches recorded for exact yesterday, show the most recent completed matches from DB
-        if (finishedMatches.length === 0) {
-          const fallbackRes = await pool.query(
-            `${baseSelect}
-             WHERE m.status IN ('FT', 'AET', 'PEN')
-               AND (l.league_id = ANY($1::int[]) OR l.league_id IS NULL)
-             ORDER BY m.match_date DESC
-             LIMIT 40`,
-            [leagueIdsArray]
-          );
-          finishedMatches = fallbackRes.rows.map((row) => ({
-            id: row.id,
-            date: 'yesterday',
-            homeTeam: row.homeTeam,
-            awayTeam: row.awayTeam,
-            homeLogo: row.homeLogo,
-            awayLogo: row.awayLogo,
-            homeScore: row.homeScore ?? 0,
-            awayScore: row.awayScore ?? 0,
-            status: row.status || 'FT',
-            minute: '',
-            league: getCompetitionName(row.leagueId, row.league),
-            events: [],
-            stats: null,
-          }));
-        }
       } catch (dbErr) {
         console.warn('DB yesterday matches query error:', dbErr.message);
       }
@@ -513,9 +586,11 @@ export async function GET(request) {
           `${baseSelect}
            WHERE m.status IN ('NS', 'UPCOMING', 'TBD', 'TIMED')
              AND (l.league_id = ANY($1::int[]) OR l.league_id IS NULL)
+             AND m.match_date >= $2::timestamp
+             AND m.match_date < $3::timestamp
            ORDER BY m.match_date ASC
            LIMIT 40`,
-          [leagueIdsArray]
+          [leagueIdsArray, `${tomorrowDate} 00:00:00`, `${dayAfterTomorrowDate} 00:00:00`]
         );
 
         const dbMatches = dbRes.rows.map((row) => ({
@@ -528,7 +603,9 @@ export async function GET(request) {
           homeScore: null,
           awayScore: null,
           status: 'UPCOMING',
-          minute: 'TBD',
+          providerStatus: row.status,
+          minute: hasKnownKickoffTime(row.matchDate, row.status) ? null : 'TBD',
+          matchDate: row.matchDate,
           league: getCompetitionName(row.leagueId, row.league),
           events: [],
           stats: null,
@@ -570,9 +647,11 @@ export async function GET(request) {
         `${baseSelect}
          WHERE m.status IN ('FT', 'AET', 'PEN')
            AND (l.league_id = ANY($1::int[]) OR l.league_id IS NULL)
+           AND m.match_date >= $2::timestamp
+           AND m.match_date < $3::timestamp
          ORDER BY m.match_date DESC
          LIMIT 60`,
-        [leagueIdsArray]
+        [leagueIdsArray, `${todayDate} 00:00:00`, `${tomorrowDate} 00:00:00`]
       );
       dbFinishedMatches = finishedRes.rows.map((row) => ({
         id: row.id,
@@ -593,9 +672,12 @@ export async function GET(request) {
       // 2. Live Matches in PostgreSQL
       const liveDbRes = await pool.query(
         `${baseSelect}
-         WHERE m.status = 'LIVE'
+         WHERE m.status IN ('LIVE', '1H', 'HT', '2H', 'ET', 'BT', 'P', 'SUSP', 'INT')
+           AND m.match_date >= $1::timestamp
+           AND m.match_date < $2::timestamp
          ORDER BY m.match_date DESC
-         LIMIT 20`
+         LIMIT 20`,
+        [`${todayDate} 00:00:00`, `${tomorrowDate} 00:00:00`]
       );
       dbLiveMatches = liveDbRes.rows.map((row) => ({
         id: row.id,
@@ -616,9 +698,12 @@ export async function GET(request) {
       // 3. Upcoming Matches in PostgreSQL
       const upcomingRes = await pool.query(
         `${baseSelect}
-         WHERE m.status IN ('NS', 'UPCOMING', 'TBD', 'TIMED', 'POSTPONED')
+         WHERE m.status IN ('NS', 'UPCOMING', 'TBD', 'TIMED')
+           AND m.match_date >= $1::timestamp
+           AND m.match_date < $2::timestamp
          ORDER BY m.match_date ASC
-         LIMIT 30`
+         LIMIT 30`,
+        [`${todayDate} 00:00:00`, `${tomorrowDate} 00:00:00`]
       );
       dbUpcomingMatches = upcomingRes.rows.map((row) => ({
         id: row.id,
@@ -630,7 +715,9 @@ export async function GET(request) {
         homeScore: null,
         awayScore: null,
         status: 'UPCOMING',
-        minute: 'TBD',
+        providerStatus: row.status,
+        minute: hasKnownKickoffTime(row.matchDate, row.status) ? null : 'TBD',
+        matchDate: row.matchDate,
         league: getCompetitionName(row.leagueId, row.league),
         events: [],
         stats: null,

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
 
-// Fetches and upserts teams across top global football leagues for season 2023
-export async function GET() {
+// Fetches and upserts teams across top global football leagues for a requested/current season
+export async function GET(request) {
   try {
     // Top global competitions targeted for synchronization
     const majorLeagues = [
@@ -15,10 +15,14 @@ export async function GET() {
       { id: 88, name: 'Eredivisie' },
       { id: 94, name: 'Primeira Liga' },
       { id: 40, name: 'Championship' },
-      { id: 13, name: 'Copa Libertadores' }
+      { id: 13, name: 'CONMEBOL Libertadores' }
     ];
 
-    const seasonYear = 2023;
+    const requestedSeason = Number(new URL(request.url).searchParams.get('season'));
+    const now = new Date();
+    const seasonYear = Number.isInteger(requestedSeason) && requestedSeason > 2000
+      ? requestedSeason
+      : (now.getUTCMonth() >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1);
     let totalTeamsInserted = 0;
     const resultsSummary = [];
 
@@ -46,15 +50,16 @@ export async function GET() {
 
         // Upsert team and stadium info
         const query = `
-          INSERT INTO Team (Team_ID, Name, Short_Name, Stadium_Name)
-          VALUES ($1, $2, $3, $4)
+          INSERT INTO Team (Team_ID, Name, Short_Name, Stadium_Name, logo_url)
+          VALUES ($1, $2, $3, $4, $5)
           ON CONFLICT (Team_ID) DO UPDATE SET 
             Name = EXCLUDED.Name,
             Short_Name = EXCLUDED.Short_Name,
-            Stadium_Name = EXCLUDED.Stadium_Name;
+            Stadium_Name = COALESCE(EXCLUDED.Stadium_Name, Team.Stadium_Name),
+            logo_url = COALESCE(EXCLUDED.logo_url, Team.logo_url);
         `;
 
-        const values = [t.id, t.name, t.code, venue ? venue.name : null];
+        const values = [t.id, t.name, t.code, venue ? venue.name : null, t.logo || null];
         const res = await pool.query(query, values);
         
         if (res.rowCount > 0) {

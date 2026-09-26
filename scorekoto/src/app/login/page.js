@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import Icon from "@/components/Icon";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -54,7 +56,7 @@ export default function LoginPage() {
     <main className="auth-page-container">
       <div className="auth-card">
         <div className="auth-header">
-          <div className="auth-logo-badge">⚽</div>
+          <div className="auth-logo-badge"><BrandLogo showWordmark={false} /></div>
           <h1>Welcome Back</h1>
           <p>
             Log in to manage your profile, followed teams, players, and match reactions.
@@ -63,7 +65,7 @@ export default function LoginPage() {
 
         {error && (
           <div className="auth-error-banner">
-            <span>⚠️</span> {error}
+            <Icon name="alert" /> {error}
           </div>
         )}
 

@@ -1,24 +1,28 @@
 import { NextResponse } from 'next/server';
 import pool from '../../lib/db';
 
-// Fetches and upserts fixtures for major global football leagues for season 2023
-export async function GET() {
+// Fetches and upserts fixtures for major global football leagues for a requested/current season
+export async function GET(request) {
   try {
     // Top global competitions targeted for synchronization
     const majorLeagues = [
-      { id: 39, name: 'Premier League' },
-      { id: 140, name: 'La Liga' },
-      { id: 135, name: 'Serie A' },
-      { id: 78, name: 'Bundesliga' },
-      { id: 61, name: 'Ligue 1' },
-      { id: 2, name: 'UEFA Champions League' },
-      { id: 88, name: 'Eredivisie' },
-      { id: 94, name: 'Primeira Liga' },
-      { id: 40, name: 'Championship' },
-      { id: 13, name: 'Copa Libertadores' }
+      { id: 39, name: 'Premier League', country: 'England' },
+      { id: 140, name: 'La Liga', country: 'Spain' },
+      { id: 135, name: 'Serie A', country: 'Italy' },
+      { id: 78, name: 'Bundesliga', country: 'Germany' },
+      { id: 61, name: 'Ligue 1', country: 'France' },
+      { id: 2, name: 'UEFA Champions League', country: 'World' },
+      { id: 88, name: 'Eredivisie', country: 'Netherlands' },
+      { id: 94, name: 'Primeira Liga', country: 'Portugal' },
+      { id: 40, name: 'Championship', country: 'England' },
+      { id: 13, name: 'CONMEBOL Libertadores', country: 'World' }
     ];
 
-    const seasonYear = 2023;
+    const requestedSeason = Number(new URL(request.url).searchParams.get('season'));
+    const now = new Date();
+    const seasonYear = Number.isInteger(requestedSeason) && requestedSeason > 2000
+      ? requestedSeason
+      : (now.getUTCMonth() >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1);
     let totalMatchesInserted = 0;
     const resultsSummary = [];
 
@@ -39,8 +43,12 @@ export async function GET() {
           const leagueCheck = await pool.query(`SELECT league_id FROM league WHERE league_id = $1`, [league.id]);
           if (leagueCheck.rows.length === 0) {
             await pool.query(
-              `INSERT INTO league (league_id, name, country, type) VALUES ($1, $2, 'Global', 'League') ON CONFLICT DO NOTHING`,
-              [league.id, league.name]
+              `INSERT INTO league (league_id, name, country, type)
+               VALUES ($1, $2, $3, 'League')
+               ON CONFLICT (league_id) DO UPDATE SET
+                 name = EXCLUDED.name,
+                 country = EXCLUDED.country`,
+              [league.id, league.name, league.country]
             );
           }
           const insertSeason = await pool.query(
@@ -83,21 +91,25 @@ export async function GET() {
         const teams = item.teams;
         const goals = item.goals;
 
-        const homeScore = goals.home !== null ? goals.home : 0;
-        const awayScore = goals.away !== null ? goals.away : 0;
+        const homeScore = goals.home ?? null;
+        const awayScore = goals.away ?? null;
 
         // Ensure teams exist to avoid foreign key errors
         await pool.query(
           `INSERT INTO team (team_id, name, logo_url)
            VALUES ($1, $2, $3)
-           ON CONFLICT (team_id) DO NOTHING`,
+           ON CONFLICT (team_id) DO UPDATE SET
+             name = EXCLUDED.name,
+             logo_url = COALESCE(EXCLUDED.logo_url, team.logo_url)`,
           [teams.home.id, teams.home.name, teams.home.logo]
         ).catch(() => {});
 
         await pool.query(
           `INSERT INTO team (team_id, name, logo_url)
            VALUES ($1, $2, $3)
-           ON CONFLICT (team_id) DO NOTHING`,
+           ON CONFLICT (team_id) DO UPDATE SET
+             name = EXCLUDED.name,
+             logo_url = COALESCE(EXCLUDED.logo_url, team.logo_url)`,
           [teams.away.id, teams.away.name, teams.away.logo]
         ).catch(() => {});
 
@@ -106,9 +118,14 @@ export async function GET() {
           INSERT INTO match (match_id, season_id, home_team_id, away_team_id, match_date, status, home_score, away_score, venue)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           ON CONFLICT (match_id) DO UPDATE SET 
+              season_id = EXCLUDED.season_id,
+              home_team_id = EXCLUDED.home_team_id,
+              away_team_id = EXCLUDED.away_team_id,
+              match_date = EXCLUDED.match_date,
               status = EXCLUDED.status,
               home_score = EXCLUDED.home_score,
-              away_score = EXCLUDED.away_score;
+              away_score = EXCLUDED.away_score,
+              venue = EXCLUDED.venue;
         `;
         
         const values = [

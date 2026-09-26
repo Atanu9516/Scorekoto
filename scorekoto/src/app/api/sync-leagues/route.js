@@ -25,20 +25,24 @@ export async function GET() {
 
       // Upsert league metadata
       const leagueQuery = `
-        INSERT INTO League (League_ID, Name, Type, Country)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO League (League_ID, Name, Type, Country, logo_url)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (League_ID) DO UPDATE SET 
           Name = EXCLUDED.Name,
           Type = EXCLUDED.Type,
-          Country = EXCLUDED.Country;
+          Country = EXCLUDED.Country,
+          logo_url = COALESCE(EXCLUDED.logo_url, League.logo_url);
       `;
       
-      await pool.query(leagueQuery, [league.id, league.name, league.type, country.name]);
+      await pool.query(leagueQuery, [league.id, league.name, league.type, country.name, league.logo || null]);
       leaguesInserted++;
 
       // Insert each recorded season for this league
       for (const season of seasons) {
-        const yearString = `${season.year}-${season.year + 1}`;
+        const startYear = season.start ? new Date(season.start).getUTCFullYear() : season.year;
+        const endYear = season.end ? new Date(season.end).getUTCFullYear() : season.year + 1;
+        const isCalendarSeason = startYear === endYear && ![2, 5].includes(Number(league.id));
+        const yearString = isCalendarSeason ? String(season.year) : `${season.year}-${season.year + 1}`;
 
         const seasonQuery = `
           INSERT INTO Season (League_ID, Year, Start_Date, End_Date)

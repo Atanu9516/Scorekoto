@@ -3,15 +3,38 @@
 import { useState } from "react";
 import Link from "next/link";
 import { getEventsForMatch, isGenericOrMissingPlayer } from "@/app/lib/events";
+import Icon from "@/components/Icon";
 
 export default function MatchTabs({
   match,
   lineup,
 }) {
-  const [activeTab, setActiveTab] = useState("summary");
+  const [activeTab, setActiveTab] = useState("lineups");
 
   const events = getEventsForMatch(match, match.events, lineup);
   const stats = match.stats;
+  const h2h = Array.isArray(match.h2h) ? match.h2h : [];
+  const formatStat = (value, suffix = "") =>
+    value === null || value === undefined ? "—" : `${value}${suffix}`;
+  const statisticRows = [
+    { label: "Possession", values: stats?.possession, suffix: "%" },
+    { label: "Team Rating", values: stats?.ratings },
+    { label: "Shots", values: stats?.shots },
+    { label: "Shots on Target", values: stats?.shotsOnTarget },
+    { label: "Shots off Target", values: stats?.shotsOffTarget },
+    { label: "Blocked Shots", values: stats?.blockedShots },
+    { label: "Shots inside Box", values: stats?.shotsInsideBox },
+    { label: "Shots outside Box", values: stats?.shotsOutsideBox },
+    { label: "Corners", values: stats?.corners },
+    { label: "Fouls", values: stats?.fouls },
+    { label: "Offsides", values: stats?.offsides },
+    { label: "Yellow Cards", values: stats?.yellowCards },
+    { label: "Red Cards", values: stats?.redCards },
+    { label: "Goalkeeper Saves", values: stats?.goalkeeperSaves },
+    { label: "Total Passes", values: stats?.totalPasses },
+    { label: "Accurate Passes", values: stats?.accuratePasses },
+    { label: "Pass Accuracy", values: stats?.passAccuracy, suffix: "%" },
+  ].filter((row) => row.values?.some((value) => value !== null && value !== undefined));
 
   return (
     <>
@@ -61,7 +84,7 @@ export default function MatchTabs({
           <h2>Match Events</h2>
 
           {events.length === 0 ? (
-            <p>No events recorded for this match yet.</p>
+            <p>No official event feed has been saved for this match.</p>
           ) : (
             <div className="match-timeline">
               {events.map((event, index) => (
@@ -84,7 +107,7 @@ export default function MatchTabs({
           <h2>Commentary</h2>
 
           {events.length === 0 ? (
-            <p>No commentary available for this match yet.</p>
+            <p>No official event commentary has been saved for this match.</p>
           ) : (
             <div className="commentary-list">
               {events.map((event, index) => (
@@ -110,61 +133,39 @@ export default function MatchTabs({
           STATS
       ========================= */}
       {activeTab === "stats" && (
-        <section className="match-section">
+        <section className="match-section match-statistics-section">
           <h2>Match Statistics</h2>
 
-          {!stats ? (
-            <p>Statistics are not available yet.</p>
+          {statisticRows.length === 0 ? (
+            <p>No official statistics have been saved for this match.</p>
           ) : (
-            <>
-              <StatRow
-                label="Possession"
-                home={`${stats.possession[0]}%`}
-                away={`${stats.possession[1]}%`}
-              />
+            <div className="match-stats-card">
+              <div className="match-stats-teams" aria-hidden="true">
+                <span className="match-stats-team match-stats-team-home">
+                  <i />
+                  {match.homeTeam}
+                </span>
+                <span className="match-stats-team match-stats-team-away">
+                  {match.awayTeam}
+                  <i />
+                </span>
+              </div>
 
-              <StatRow
-                label="Shots"
-                home={stats.shots[0]}
-                away={stats.shots[1]}
-              />
-
-              <StatRow
-                label="Shots on Target"
-                home={stats.shotsOnTarget[0]}
-                away={stats.shotsOnTarget[1]}
-              />
-
-              <StatRow
-                label="Corners"
-                home={stats.corners[0]}
-                away={stats.corners[1]}
-              />
-
-              <StatRow
-                label="Fouls"
-                home={stats.fouls[0]}
-                away={stats.fouls[1]}
-              />
-
-              <StatRow
-                label="Offsides"
-                home={stats.offsides[0]}
-                away={stats.offsides[1]}
-              />
-
-              <StatRow
-                label="Yellow Cards"
-                home={stats.yellowCards[0]}
-                away={stats.yellowCards[1]}
-              />
-
-              <StatRow
-                label="Red Cards"
-                home={stats.redCards[0]}
-                away={stats.redCards[1]}
-              />
-            </>
+              <div className="match-stats-list">
+                {statisticRows.map((row) => (
+                  <StatRow
+                    key={row.label}
+                    label={row.label}
+                    home={row.values?.[0]}
+                    away={row.values?.[1]}
+                    suffix={row.suffix}
+                    homeTeam={match.homeTeam}
+                    awayTeam={match.awayTeam}
+                    formatStat={formatStat}
+                  />
+                ))}
+              </div>
+            </div>
           )}
         </section>
       )}
@@ -177,11 +178,12 @@ export default function MatchTabs({
           <h2>Lineups</h2>
 
           {!lineup ? (
-            <p>Lineups are not available for this match yet.</p>
+            <p>No official lineup has been saved for this match.</p>
           ) : (
             <MatchLineupPitch
               home={lineup.home}
               away={lineup.away}
+              events={events}
             />
           )}
         </section>
@@ -193,30 +195,11 @@ export default function MatchTabs({
       {activeTab === "h2h" && (
         <section className="match-section">
           <h2>Head to Head</h2>
-
-          <div className="h2h-match">
-            <span>15 Aug 2026</span>
-
-            <strong>
-              {match.homeTeam} 2 - 1 {match.awayTeam}
-            </strong>
-          </div>
-
-          <div className="h2h-match">
-            <span>10 May 2026</span>
-
-            <strong>
-              {match.awayTeam} 1 - 1 {match.homeTeam}
-            </strong>
-          </div>
-
-          <div className="h2h-match">
-            <span>22 Dec 2025</span>
-
-            <strong>
-              {match.homeTeam} 3 - 0 {match.awayTeam}
-            </strong>
-          </div>
+          {h2h.length === 0 ? (
+            <p>No previous head-to-head matches are stored.</p>
+          ) : (
+            <HeadToHead matches={h2h} currentMatch={match} />
+          )}
         </section>
       )}
     </>
@@ -244,7 +227,7 @@ function MatchEvent({ event, match }) {
       </span>
 
       <span className="event-icon">
-        {getEventIcon(event.type)}
+        <Icon name={getEventIcon(event.type)} className={`event-icon-${event.type}`} />
       </span>
 
       <div className="event-details">
@@ -289,24 +272,51 @@ function StatRow({
   label,
   home,
   away,
+  suffix = "",
+  homeTeam,
+  awayTeam,
+  formatStat,
 }) {
+  const homeValue = toStatNumber(home);
+  const awayValue = toStatNumber(away);
+  const total = Math.max(0, homeValue) + Math.max(0, awayValue);
+  const homePercentage = total > 0 ? (Math.max(0, homeValue) / total) * 100 : 50;
+  const awayPercentage = 100 - homePercentage;
+  const homeDisplay = formatStat(home, suffix);
+  const awayDisplay = formatStat(away, suffix);
+
   return (
-    <div className="stat-row stat-row-detailed">
+    <div
+      className="stat-row stat-row-detailed"
+      aria-label={`${label}: ${homeTeam} ${homeDisplay}, ${awayTeam} ${awayDisplay}`}
+    >
+      <div className="stat-row-heading">
+        <strong className={homeValue > awayValue ? "stat-value-leading" : undefined}>
+          {homeDisplay}
+        </strong>
+        <span>{label}</span>
+        <strong className={awayValue > homeValue ? "stat-value-leading" : undefined}>
+          {awayDisplay}
+        </strong>
+      </div>
 
-      <strong>
-        {home}
-      </strong>
-
-      <span>
-        {label}
-      </span>
-
-      <strong>
-        {away}
-      </strong>
-
+      <div className="stat-comparison" aria-hidden="true">
+        <div className="stat-track stat-track-home">
+          <span style={{ width: `${homePercentage}%` }} />
+        </div>
+        <div className="stat-track stat-track-away">
+          <span style={{ width: `${awayPercentage}%` }} />
+        </div>
+      </div>
     </div>
   );
+}
+
+function toStatNumber(value) {
+  if (value === null || value === undefined) return 0;
+
+  const parsed = Number(String(value).replace("%", "").trim());
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 
@@ -317,28 +327,31 @@ function StatRow({
 function getEventIcon(type) {
   switch (type) {
     case "goal":
-      return "⚽";
+      return "football";
 
     case "penalty-goal":
-      return "🎯";
+      return "target";
+
+    case "missed-penalty":
+      return "target";
 
     case "own-goal":
-      return "⚽";
+      return "football";
 
     case "yellow-card":
-      return "🟨";
+      return "yellowCard";
 
     case "red-card":
-      return "🟥";
+      return "redCard";
 
     case "substitution":
-      return "🔁";
+      return "refresh";
 
     case "whistle":
-      return "⏱️";
+      return "clock";
 
     default:
-      return "•";
+      return "info";
   }
 }
 
@@ -353,6 +366,9 @@ function getEventTitle(event) {
 
     case "penalty-goal":
       return hasRealPlayer ? `${event.player} scores a penalty` : `Penalty scored ${teamLabel}`.trim();
+
+    case "missed-penalty":
+      return hasRealPlayer ? `${event.player} misses a penalty` : `Penalty missed ${teamLabel}`.trim();
 
     case "own-goal":
       return hasRealPlayer ? `${event.player} own goal` : `Own Goal ${teamLabel}`.trim();
@@ -377,6 +393,9 @@ function getEventTitle(event) {
     case "whistle":
       return event.detail || "Match Whistle";
 
+    case "var":
+      return event.detail ? `VAR: ${event.detail}` : `VAR review ${teamLabel}`.trim();
+
     default:
       return event.detail || (hasRealPlayer ? event.player : `Match event ${teamLabel}`.trim());
   }
@@ -395,7 +414,7 @@ function getCommentary(event) {
           hasRealAssist ? ` (Assisted by ${event.assist})` : ""
         }`;
       }
-      return `GOAL! ${teamName} finds the back of the net! A crucial strike to alter the scoreline.`;
+      return `Goal for ${teamName}.`;
 
     case "penalty-goal":
       if (hasRealPlayer) {
@@ -403,11 +422,16 @@ function getCommentary(event) {
       }
       return `GOAL! Penalty converted for ${teamName}.`;
 
+    case "missed-penalty":
+      return hasRealPlayer
+        ? `${event.player} misses a penalty for ${teamName}.`
+        : `Penalty missed by ${teamName}.`;
+
     case "own-goal":
       if (hasRealPlayer) {
-        return `Own goal by ${event.player}. Unfortunate deflection for ${teamName}.`;
+        return `Own goal recorded for ${event.player} (${teamName}).`;
       }
-      return `Own goal scored! Unfortunate deflection into the net.`;
+      return `Own goal recorded for ${teamName}.`;
 
     case "yellow-card":
       if (hasRealPlayer) {
@@ -443,12 +467,15 @@ function getCommentary(event) {
     case "whistle":
       return event.detail || `Whistle blown at ${event.minute}.`;
 
+    case "var":
+      return event.detail ? `VAR review: ${event.detail}.` : `VAR review for ${teamName}.`;
+
     default:
       return event.detail || "Match action in progress.";
   }
 }
 
-function MatchLineupPitch({ home, away }) {
+function MatchLineupPitch({ home, away, events }) {
   const homeRows = [
     ...new Set(
       home.startingXI.map((player) => player.row)
@@ -468,8 +495,8 @@ function MatchLineupPitch({ home, away }) {
 
         <div className="faceoff-team home-team-info">
           <strong>{home.team}</strong>
-          <span>{home.formation}</span>
-          <small>Coach: {home.coach}</small>
+          {home.formation && <span>{home.formation}</span>}
+          {home.coach && <small>Coach: {home.coach}</small>}
         </div>
 
         <div className="faceoff-vs">
@@ -478,8 +505,8 @@ function MatchLineupPitch({ home, away }) {
 
         <div className="faceoff-team away-team-info">
           <strong>{away.team}</strong>
-          <span>{away.formation}</span>
-          <small>Coach: {away.coach}</small>
+          {away.formation && <span>{away.formation}</span>}
+          {away.coach && <small>Coach: {away.coach}</small>}
         </div>
 
       </div>
@@ -504,6 +531,8 @@ function MatchLineupPitch({ home, away }) {
                   <PitchPlayer
                     key={player.name}
                     player={player}
+                    team={home.team}
+                    events={events}
                   />
                 ))}
               </div>
@@ -530,6 +559,8 @@ function MatchLineupPitch({ home, away }) {
                   <PitchPlayer
                     key={player.name}
                     player={player}
+                    team={away.team}
+                    events={events}
                   />
                 ))}
               </div>
@@ -543,9 +574,9 @@ function MatchLineupPitch({ home, away }) {
 
       <div className="faceoff-substitutes">
 
-        <SubstituteList lineup={home} />
+        <SubstituteList lineup={home} events={events} />
 
-        <SubstituteList lineup={away} />
+        <SubstituteList lineup={away} events={events} />
 
       </div>
 
@@ -553,13 +584,16 @@ function MatchLineupPitch({ home, away }) {
   );
 }
 
-function SubstituteList({ lineup }) {
+function SubstituteList({ lineup, events }) {
   return (
     <div className="faceoff-subs-team">
       <h3>{lineup.team} Substitutes</h3>
 
+      {lineup.substitutes.length === 0 && <p>No substitutes recorded.</p>}
+
       {lineup.substitutes.map((player) => {
         const playerSlug = player.id || encodeURIComponent(player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+        const indicators = getPlayerMatchIndicators(player, lineup.team, events);
 
         return (
           <Link
@@ -567,8 +601,12 @@ function SubstituteList({ lineup }) {
             href={`/players/${playerSlug}`}
             className="substitute-player substitute-player-link"
           >
-            <span>#{player.number}</span>
-            <strong>{player.name}</strong>
+            <span>{player.number ? `#${player.number}` : "Sub"}</span>
+            <div className="substitute-player-details">
+              <strong>{player.name}</strong>
+              <PlayerMatchBadges indicators={indicators} />
+            </div>
+            <PlayerRating rating={player.rating} compact />
           </Link>
         );
       })}
@@ -576,18 +614,24 @@ function SubstituteList({ lineup }) {
   );
 }
 
-function PitchPlayer({ player }) {
+function PitchPlayer({ player, team, events }) {
   const playerSlug = player.id || encodeURIComponent(player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+  const indicators = getPlayerMatchIndicators(player, team, events);
 
   const content = (
     <>
-      <div className="pitch-shirt">
-        {player.number}
+      <div className="pitch-player-visual">
+        <div className="pitch-shirt">
+        {player.number ?? "—"}
+        </div>
+        <PlayerRating rating={player.rating} />
       </div>
 
       <strong>
         {player.name}
       </strong>
+
+      <PlayerMatchBadges indicators={indicators} />
 
       <span>
         {player.position}
@@ -602,5 +646,167 @@ function PitchPlayer({ player }) {
     >
       {content}
     </Link>
+  );
+}
+
+function PlayerRating({ rating, compact = false }) {
+  if (rating === null || rating === undefined || rating === "") return null;
+
+  const numericRating = Number(rating);
+  if (!Number.isFinite(numericRating)) return null;
+
+  const tone = numericRating >= 8
+    ? "excellent"
+    : numericRating >= 7
+    ? "good"
+    : numericRating >= 6
+    ? "average"
+    : "low";
+
+  return (
+    <span
+      className={`player-match-rating player-match-rating-${tone}${compact ? " player-match-rating-compact" : ""}`}
+      title={`Match rating: ${numericRating.toFixed(1)}`}
+      aria-label={`Match rating ${numericRating.toFixed(1)}`}
+    >
+      {numericRating.toFixed(1)}
+    </span>
+  );
+}
+
+function PlayerMatchBadges({ indicators }) {
+  if (indicators.length === 0) return null;
+
+  return (
+    <span className="player-event-badges">
+      {indicators.map((indicator, index) => (
+        <span
+          className={`player-event-badge player-event-badge-${indicator.type}`}
+          key={`${indicator.type}-${indicator.minute}-${index}`}
+          title={`${indicator.label}${indicator.minute ? ` at ${indicator.minute}` : ""}`}
+          aria-label={`${indicator.label}${indicator.minute ? ` at ${indicator.minute}` : ""}`}
+        >
+          {indicator.type === "goal" && <Icon name="football" />}
+          {indicator.type === "penalty-goal" && <Icon name="target" />}
+          {indicator.type === "assist" && <b>A</b>}
+          {indicator.type === "own-goal" && <b>OG</b>}
+          {indicator.type === "yellow-card" && <Icon name="yellowCard" />}
+          {indicator.type === "red-card" && <Icon name="redCard" />}
+          {indicator.type === "sub-in" && <Icon name="arrowUp" />}
+          {indicator.type === "sub-out" && <Icon name="arrowDown" />}
+          {indicator.minute && <small>{indicator.minute}</small>}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function getPlayerMatchIndicators(player, team, events) {
+  const indicators = [];
+
+  for (const event of Array.isArray(events) ? events : []) {
+    const eventMatchesTeam = sameTeamName(event.team, team);
+    const isEventPlayer = playerNameMatches(player.name, event.player);
+
+    if (["goal", "penalty-goal"].includes(event.type) && eventMatchesTeam && isEventPlayer) {
+      indicators.push({
+        type: event.type,
+        label: event.type === "penalty-goal" ? "Penalty goal" : "Goal",
+        minute: event.minute,
+      });
+    }
+
+    // The provider assigns own-goal events to the benefiting team, while the
+    // named player belongs to the opponent. Match that player across both sides.
+    if (event.type === "own-goal" && isEventPlayer) {
+      indicators.push({ type: "own-goal", label: "Own goal", minute: event.minute });
+    }
+
+    if (["goal", "penalty-goal"].includes(event.type) && eventMatchesTeam && playerNameMatches(player.name, event.assist)) {
+      indicators.push({ type: "assist", label: "Assist", minute: event.minute });
+    }
+
+    if (["yellow-card", "red-card"].includes(event.type) && eventMatchesTeam && isEventPlayer) {
+      indicators.push({
+        type: event.type,
+        label: event.type === "red-card" ? "Red card" : "Yellow card",
+        minute: event.minute,
+      });
+    }
+
+    if (event.type === "substitution" && eventMatchesTeam) {
+      if (playerNameMatches(player.name, event.playerIn)) {
+        indicators.push({ type: "sub-in", label: "Substituted on", minute: event.minute });
+      }
+      if (playerNameMatches(player.name, event.playerOut)) {
+        indicators.push({ type: "sub-out", label: "Substituted off", minute: event.minute });
+      }
+    }
+  }
+
+  return indicators;
+}
+
+function playerNameMatches(lineupName, eventName) {
+  const lineupTokens = normalizePlayerName(lineupName).split(" ").filter(Boolean);
+  const eventTokens = normalizePlayerName(eventName).split(" ").filter(Boolean);
+  if (lineupTokens.length === 0 || eventTokens.length === 0) return false;
+
+  const lineupNormalized = lineupTokens.join(" ");
+  const eventNormalized = eventTokens.join(" ");
+  if (lineupNormalized === eventNormalized) return true;
+
+  const sameSurname = lineupTokens.at(-1) === eventTokens.at(-1);
+  const sameInitial = lineupTokens[0]?.[0] === eventTokens[0]?.[0];
+  return sameSurname && sameInitial;
+}
+
+function normalizePlayerName(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .toLocaleLowerCase();
+}
+
+function sameTeamName(first, second) {
+  return normalizePlayerName(first) === normalizePlayerName(second);
+}
+
+function HeadToHead({ matches, currentMatch }) {
+  const summary = matches.reduce((result, item) => {
+    if (item.homeScore === item.awayScore) {
+      result.draws += 1;
+      return result;
+    }
+
+    const winnerId = item.homeScore > item.awayScore ? item.homeTeamId : item.awayTeamId;
+    if (Number(winnerId) === Number(currentMatch.homeTeamId)) result.homeWins += 1;
+    if (Number(winnerId) === Number(currentMatch.awayTeamId)) result.awayWins += 1;
+    return result;
+  }, { homeWins: 0, draws: 0, awayWins: 0 });
+
+  return (
+    <div className="h2h-content">
+      <div className="h2h-summary">
+        <div><strong>{summary.homeWins}</strong><span>{currentMatch.homeTeam} wins</span></div>
+        <div><strong>{summary.draws}</strong><span>Draws</span></div>
+        <div><strong>{summary.awayWins}</strong><span>{currentMatch.awayTeam} wins</span></div>
+      </div>
+
+      <div className="h2h-list">
+        {matches.map((item) => (
+          <Link href={`/matches/${item.id}`} className="h2h-row" key={item.id}>
+            <div>
+              <small>{new Date(item.matchDate).toLocaleDateString()} · {item.league}</small>
+              <span>{item.homeTeam}</span>
+            </div>
+            <strong>{item.homeScore} - {item.awayScore}</strong>
+            <span>{item.awayTeam}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }

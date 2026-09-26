@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "audit:team-squads": "node --env-file=.env.local scripts/audit-team-squads.mjs",
+    "setup:team-squads": "node --env-file=.env.local scripts/ensure-team-squad-cache.mjs",
+    "audit:match-details": "node --env-file=.env.local scripts/audit-match-details.mjs",
+    "backfill:match-details": "node --env-file=.env.local scripts/backfill-match-details.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

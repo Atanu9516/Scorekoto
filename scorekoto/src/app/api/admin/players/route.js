@@ -37,11 +37,11 @@ export async function POST(request) {
 
     const cleanFirstName = first_name.trim();
     const cleanLastName = last_name.trim();
-    const cleanPosition = primary_position ? primary_position.trim() : 'Midfielder';
+    const cleanPosition = primary_position ? primary_position.trim() : null;
     const cleanNationality = nationality ? nationality.trim() : null;
     const cleanDob = date_of_birth ? date_of_birth.trim() : null;
-    const cleanMarketValue = market_value_euros ? parseFloat(market_value_euros) : 0;
-    const cleanWeight = weight_cm ? parseFloat(weight_cm) : 0;
+    const cleanMarketValue = market_value_euros ? parseFloat(market_value_euros) : null;
+    const cleanWeight = weight_cm ? parseFloat(weight_cm) : null;
     const cleanPhoto = photo_url ? photo_url.trim() : null;
 
     let validTeamId = null;

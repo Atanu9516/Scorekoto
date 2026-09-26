@@ -37,8 +37,14 @@ export async function PUT(request, { params }) {
     const updateQuery = `
       UPDATE match
       SET 
-        home_score = COALESCE($1, home_score),
-        away_score = COALESCE($2, away_score),
+        home_score = CASE
+          WHEN COALESCE($3, status) IN ('UPCOMING', 'NS', 'TBD', 'TIMED', 'PST') THEN NULL
+          ELSE COALESCE($1, home_score)
+        END,
+        away_score = CASE
+          WHEN COALESCE($3, status) IN ('UPCOMING', 'NS', 'TBD', 'TIMED', 'PST') THEN NULL
+          ELSE COALESCE($2, away_score)
+        END,
         status = COALESCE($3, status),
         venue = COALESCE($4, venue),
         match_date = COALESCE($5, match_date),
@@ -51,7 +57,7 @@ export async function PUT(request, { params }) {
     const result = await pool.query(updateQuery, [
       home_score !== undefined ? parseInt(home_score, 10) : null,
       away_score !== undefined ? parseInt(away_score, 10) : null,
-      status || null,
+      status ? status.toUpperCase() : null,
       venue || null,
       match_date || null,
       home_possession !== undefined ? parseFloat(home_possession) : null,

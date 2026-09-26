@@ -62,37 +62,43 @@ export async function POST(request) {
     const homeTeam = teamCheck.rows.find((t) => t.team_id === homeId);
     const awayTeam = teamCheck.rows.find((t) => t.team_id === awayId);
 
-    // Resolve season
-    let resolvedSeasonId = parseInt(season_id, 10);
+    // A competition season is required; silently choosing an arbitrary season corrupts match labels.
+    const resolvedSeasonId = parseInt(season_id, 10);
     if (!resolvedSeasonId || isNaN(resolvedSeasonId)) {
-      const defaultSeasonRes = await pool.query(
-        'SELECT season_id FROM season ORDER BY season_id DESC LIMIT 1'
+      return NextResponse.json(
+        { error: 'A competition season must be selected.' },
+        { status: 400 }
       );
-      if (defaultSeasonRes.rows.length > 0) {
-        resolvedSeasonId = defaultSeasonRes.rows[0].season_id;
-      } else {
-        return NextResponse.json(
-          { error: 'No seasons found in database. Please create a season first.' },
-          { status: 400 }
-        );
-      }
-    } else {
-      const seasonCheck = await pool.query('SELECT season_id FROM season WHERE season_id = $1', [resolvedSeasonId]);
-      if (seasonCheck.rows.length === 0) {
-        return NextResponse.json(
-          { error: 'Selected season does not exist.' },
-          { status: 400 }
-        );
-      }
     }
 
-    const matchVenue = venue && venue.trim() ? venue.trim() : (homeTeam.stadium_name || 'Home Stadium');
-    const matchStatus = status && status.trim() ? status.trim() : 'UPCOMING';
-    const parsedHomeScore = home_score !== undefined && home_score !== '' ? parseInt(home_score, 10) : 0;
-    const parsedAwayScore = away_score !== undefined && away_score !== '' ? parseInt(away_score, 10) : 0;
-    const parsedHomePossession = home_possession !== undefined && home_possession !== '' ? parseFloat(home_possession) : 50;
-    const parsedAwayPossession = away_possession !== undefined && away_possession !== '' ? parseFloat(away_possession) : 50;
+    const seasonCheck = await pool.query('SELECT season_id FROM season WHERE season_id = $1', [resolvedSeasonId]);
+    if (seasonCheck.rows.length === 0) {
+      return NextResponse.json(
+        { error: 'Selected season does not exist.' },
+        { status: 400 }
+      );
+    }
+
+    const matchVenue = venue && venue.trim() ? venue.trim() : (homeTeam.stadium_name || null);
+    const matchStatus = status && status.trim() ? status.trim().toUpperCase() : 'NS';
+    const scheduledStatuses = new Set(['UPCOMING', 'NS', 'TBD', 'TIMED', 'PST']);
+    const completedStatuses = new Set(['FT', 'AET', 'PEN']);
+    const parsedHomeScore = scheduledStatuses.has(matchStatus)
+      ? null
+      : (home_score !== undefined && home_score !== '' ? parseInt(home_score, 10) : null);
+    const parsedAwayScore = scheduledStatuses.has(matchStatus)
+      ? null
+      : (away_score !== undefined && away_score !== '' ? parseInt(away_score, 10) : null);
+    const parsedHomePossession = home_possession !== undefined && home_possession !== '' ? parseFloat(home_possession) : null;
+    const parsedAwayPossession = away_possession !== undefined && away_possession !== '' ? parseFloat(away_possession) : null;
     const parsedDate = match_date && match_date.trim() ? new Date(match_date).toISOString() : new Date().toISOString();
+
+    if (completedStatuses.has(matchStatus) && (parsedHomeScore === null || parsedAwayScore === null)) {
+      return NextResponse.json(
+        { error: 'Completed matches require both home and away scores.' },
+        { status: 400 }
+      );
+    }
 
     const insertQuery = `
       INSERT INTO match (

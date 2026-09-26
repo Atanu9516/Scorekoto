@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Icon, { ReactionIcon } from "@/components/Icon";
 
 export default function ProfilePage() {
   const { user, loading: authLoading, checkAuth } = useAuth();
@@ -100,7 +101,7 @@ export default function ProfilePage() {
       if (!res.ok) {
         setProfileMessage({ type: "error", text: data.error || "Failed to update profile." });
       } else {
-        setProfileMessage({ type: "success", text: "✓ Profile updated successfully!" });
+        setProfileMessage({ type: "success", text: "Profile updated successfully!" });
         checkAuth();
       }
     } catch (err) {
@@ -172,6 +173,7 @@ export default function ProfilePage() {
         }
         setModalType(null);
         setSearchQuery("");
+        window.dispatchEvent(new Event("scorekoto:favorites-updated"));
       }
     } catch (err) {
       console.error("Error adding favorite:", err);
@@ -193,6 +195,7 @@ export default function ProfilePage() {
         await fetch(`/api/favorites/leagues?leagueId=${id}`, { method: "DELETE" });
         setFavoriteLeagues((prev) => prev.filter((l) => l.league_id !== id));
       }
+      window.dispatchEvent(new Event("scorekoto:favorites-updated"));
     } catch (err) {
       console.error("Error removing favorite:", err);
     }
@@ -226,13 +229,13 @@ export default function ProfilePage() {
       {/* USER HEADER BANNER */}
       <section className="profile-header-card">
         <div className="profile-avatar-box">
-          <span className="profile-avatar-emoji">👤</span>
+          <Icon name="user" className="profile-avatar-emoji" />
         </div>
         <div className="profile-header-details">
           <div className="profile-name-row">
             <h1>{user.username}</h1>
             <span className={`profile-role-tag ${user.role === "admin" ? "admin" : ""}`}>
-              {user.role === "admin" ? "🛡️ Administrator" : "⚽ Football Fan"}
+              <Icon name={user.role === "admin" ? "shield" : "football"} /> {user.role === "admin" ? "Administrator" : "Football Fan"}
             </span>
           </div>
           <p className="profile-email-text">{user.email}</p>
@@ -244,7 +247,7 @@ export default function ProfilePage() {
         {user.role === "admin" && (
           <div className="profile-admin-shortcut">
             <Link href="/admin" className="admin-shortcut-btn">
-              🛡️ Go to Admin Console
+              <Icon name="shield" /> Go to Admin Console
             </Link>
           </div>
         )}
@@ -276,12 +279,12 @@ export default function ProfilePage() {
         <div className="profile-col">
           {/* EDIT ACCOUNT INFORMATION */}
           <section className="profile-card">
-            <h2>✏️ Edit Profile Information</h2>
+            <h2><Icon name="pencil" /> Edit Profile Information</h2>
             <p className="profile-card-desc">Update your display name or account email address.</p>
 
             {profileMessage.text && (
               <div className={`profile-status-banner ${profileMessage.type}`}>
-                {profileMessage.text}
+                <Icon name={profileMessage.type === "success" ? "check" : "alert"} /> {profileMessage.text}
               </div>
             )}
 
@@ -316,7 +319,7 @@ export default function ProfilePage() {
 
           {/* USER ACTIVITY: RECENT MATCH REACTIONS */}
           <section className="profile-card">
-            <h2>💬 My Match Reactions</h2>
+            <h2><Icon name="message" /> My Match Reactions</h2>
             <p className="profile-card-desc">Comments and reactions you posted during football matches.</p>
 
             {loadingData ? (
@@ -328,7 +331,7 @@ export default function ProfilePage() {
                 {recentReactions.map((r) => (
                   <div key={r.comment_id} className="profile-reaction-item">
                     <div className="reaction-meta-row">
-                      <span className="reaction-badge">{r.reaction || "⚽"}</span>
+                      <span className="reaction-badge"><ReactionIcon reaction={r.reaction || "⚽"} /></span>
                       <Link href={`/matches/${r.match_id}`} className="reaction-match-link">
                         {r.home_team && r.away_team ? `${r.home_team} vs ${r.away_team}` : `Match #${r.match_id}`}
                       </Link>
@@ -338,7 +341,7 @@ export default function ProfilePage() {
                         className="reaction-delete-btn"
                         title="Delete reaction"
                       >
-                        🗑️
+                        <Icon name="trash" />
                       </button>
                     </div>
                     <p className="reaction-text">{r.comment_text}</p>
@@ -357,7 +360,7 @@ export default function ProfilePage() {
           {/* FAVORITE TEAMS */}
           <section className="profile-card">
             <div className="profile-card-header">
-              <h2>⭐ Favorite Teams ({favoriteTeams.length})</h2>
+              <h2><Icon name="star" /> Favorite Teams ({favoriteTeams.length})</h2>
               <button
                 type="button"
                 className="profile-add-btn"
@@ -367,7 +370,7 @@ export default function ProfilePage() {
                 }}
                 title="Add a new favorite team"
               >
-                + Add Team
+                <Icon name="plus" /> Add Team
               </button>
             </div>
 
@@ -384,7 +387,7 @@ export default function ProfilePage() {
                     setSearchQuery("");
                   }}
                 >
-                  + Add Your Club
+                  <Icon name="plus" /> Add Your Club
                 </button>
               </div>
             ) : (
@@ -399,7 +402,7 @@ export default function ProfilePage() {
                       )}
                       <div>
                         <strong>{team.name}</strong>
-                        <span>{team.stadium_name || "Stadium"}</span>
+                        <span>{team.stadium_name || "Venue unavailable"}</span>
                       </div>
                     </Link>
                     <button
@@ -408,7 +411,7 @@ export default function ProfilePage() {
                       onClick={() => handleRemoveFavorite("teams", team.team_id || team.id)}
                       title="Remove from favorites"
                     >
-                      ✕
+                      <Icon name="close" />
                     </button>
                   </div>
                 ))}
@@ -419,7 +422,7 @@ export default function ProfilePage() {
           {/* FAVORITE PLAYERS */}
           <section className="profile-card">
             <div className="profile-card-header">
-              <h2>🏃 Favorite Players ({favoritePlayers.length})</h2>
+              <h2><Icon name="player" /> Favorite Players ({favoritePlayers.length})</h2>
               <button
                 type="button"
                 className="profile-add-btn"
@@ -429,7 +432,7 @@ export default function ProfilePage() {
                 }}
                 title="Add a new favorite player"
               >
-                + Add Player
+                <Icon name="plus" /> Add Player
               </button>
             </div>
 
@@ -446,14 +449,14 @@ export default function ProfilePage() {
                     setSearchQuery("");
                   }}
                 >
-                  + Add Player
+                  <Icon name="plus" /> Add Player
                 </button>
               </div>
             ) : (
               <div className="profile-fav-list">
                 {favoritePlayers.map((player) => (
                   <div key={player.player_id || player.id} className="profile-fav-row">
-                    <Link href={`/players/${player.slug}`} className="fav-row-link">
+                    <Link href={`/players/${player.player_id || player.id}`} className="fav-row-link">
                       {player.photo_url || player.photo ? (
                         <img src={player.photo_url || player.photo} alt={player.name} className="fav-row-img player-avatar-img" />
                       ) : (
@@ -463,7 +466,7 @@ export default function ProfilePage() {
                       )}
                       <div>
                         <strong>{player.name}</strong>
-                        <span>{player.team_name ? `${player.team_name} · ` : ""}{player.position || "Player"}</span>
+                        <span>{player.team_name ? `${player.team_name} · ` : ""}{player.position || "Position unavailable"}</span>
                       </div>
                     </Link>
                     <button
@@ -472,7 +475,7 @@ export default function ProfilePage() {
                       onClick={() => handleRemoveFavorite("players", player.player_id || player.id)}
                       title="Remove from favorites"
                     >
-                      ✕
+                      <Icon name="close" />
                     </button>
                   </div>
                 ))}
@@ -483,7 +486,7 @@ export default function ProfilePage() {
           {/* FAVORITE LEAGUES */}
           <section className="profile-card">
             <div className="profile-card-header">
-              <h2>🏆 Favorite Leagues ({favoriteLeagues.length})</h2>
+              <h2><Icon name="trophy" /> Favorite Leagues ({favoriteLeagues.length})</h2>
               <button
                 type="button"
                 className="profile-add-btn"
@@ -493,7 +496,7 @@ export default function ProfilePage() {
                 }}
                 title="Add a new favorite league"
               >
-                + Add League
+                <Icon name="plus" /> Add League
               </button>
             </div>
 
@@ -510,7 +513,7 @@ export default function ProfilePage() {
                     setSearchQuery("");
                   }}
                 >
-                  + Add League
+                  <Icon name="plus" /> Add League
                 </button>
               </div>
             ) : (
@@ -518,10 +521,10 @@ export default function ProfilePage() {
                 {favoriteLeagues.map((league) => (
                   <div key={league.league_id || league.id} className="profile-fav-row">
                     <Link href={`/leagues/${league.slug || league.name.toLowerCase().replaceAll(" ", "-")}`} className="fav-row-link">
-                      <div className="fav-row-placeholder">🏆</div>
+                      <div className="fav-row-placeholder"><Icon name="trophy" /></div>
                       <div>
                         <strong>{league.name}</strong>
-                        <span>{league.country || "Global Competition"}</span>
+                        <span>{league.country || "Country unavailable"}</span>
                       </div>
                     </Link>
                     <button
@@ -530,7 +533,7 @@ export default function ProfilePage() {
                       onClick={() => handleRemoveFavorite("leagues", league.league_id || league.id)}
                       title="Remove from favorites"
                     >
-                      ✕
+                      <Icon name="close" />
                     </button>
                   </div>
                 ))}
@@ -546,10 +549,10 @@ export default function ProfilePage() {
           <div className="profile-modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="profile-modal-header">
               <h3>
-                + Add Favorite {modalType === "teams" ? "Team" : modalType === "players" ? "Player" : "League"}
+                <Icon name="plus" /> Add Favorite {modalType === "teams" ? "Team" : modalType === "players" ? "Player" : "League"}
               </h3>
               <button type="button" className="modal-close-btn" onClick={() => setModalType(null)}>
-                ×
+                <Icon name="close" />
               </button>
             </div>
 
@@ -581,7 +584,7 @@ export default function ProfilePage() {
                         {modalType === "teams"
                           ? item.stadium_name || item.short_name || "Club"
                           : modalType === "players"
-                          ? `${item.position || "Player"} · ${item.nationality || item.team_name || "Football"}`
+                          ? `${item.position || "Position unavailable"} · ${item.nationality || item.team_name || "Details unavailable"}`
                           : item.country || "Competition"}
                       </span>
                     </div>

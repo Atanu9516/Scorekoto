@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import FavoriteButton from "@/components/FavoriteButton";
+import Icon from "@/components/Icon";
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([]);
@@ -41,8 +42,9 @@ export default function TeamsPage() {
   return (
     <main className="teams-directory-page">
       <section className="page-title">
-        <h1>⚽ Football Teams</h1>
-        <p>Explore all {teams.length > 0 ? teams.length : "400+"} clubs in our database</p>
+        <span className="page-title-kicker">Club directory</span>
+        <h1><Icon name="football" /> Football Teams</h1>
+        <p>{loading ? "Loading clubs from the database…" : `Explore ${teams.length} clubs in our database`}</p>
 
         <div className="teams-search-bar">
           <input
@@ -89,7 +91,7 @@ export default function TeamsPage() {
 
                 <div className="team-card-info">
                   <strong>{team.name}</strong>
-                  <span>{team.stadium_name || "Stadium"}</span>
+                  <span>{team.stadium_name || "Venue unavailable"}</span>
                 </div>
               </Link>
 

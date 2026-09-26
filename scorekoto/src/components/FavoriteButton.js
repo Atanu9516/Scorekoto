@@ -1,6 +1,7 @@
 "use client";
 
 import { useFavorites } from "@/context/FavoritesContext";
+import Icon from "./Icon";
 
 export default function FavoriteButton({
     type,
@@ -18,7 +19,7 @@ export default function FavoriteButton({
                 className="favorite-button"
                 disabled
             >
-                ☆
+                <Icon name="star" />
             </button>
         );
     }
@@ -42,7 +43,7 @@ export default function FavoriteButton({
                     : "Add to favorites"
             }
         >
-            {active ? "★" : "☆"}
+            <Icon name="star" filled={active} />
         </button>
     );
 }

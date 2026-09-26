@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+import LocalKickoffTime from "./LocalKickoffTime";
 
 export default function LeagueTabs({
     league,
@@ -22,16 +23,16 @@ export default function LeagueTabs({
         router.push(`${pathname}?season=${newSeason}`);
     };
 
-    const upcomingMatches = leagueMatches.filter(
-        (match) => match.status === "UPCOMING"
+    const upcomingMatches = leagueMatches.filter((match) =>
+        ["UPCOMING", "NS", "TBD", "TIMED", "PST"].includes(match.status)
     );
 
-    const finishedMatches = leagueMatches.filter(
-        (match) => match.status === "FT"
+    const finishedMatches = leagueMatches.filter((match) =>
+        ["FT", "AET", "PEN"].includes(match.status)
     );
 
-    const liveMatches = leagueMatches.filter(
-        (match) => match.status === "LIVE"
+    const liveMatches = leagueMatches.filter((match) =>
+        ["LIVE", "1H", "HT", "2H", "ET", "BT", "P", "SUSP", "INT"].includes(match.status)
     );
 
     return (
@@ -96,6 +97,11 @@ export default function LeagueTabs({
                             <LeagueInfo
                                 label="Season"
                                 value={league.season}
+                            />
+
+                            <LeagueInfo
+                                label="Competition Type"
+                                value={league.type || "Type unavailable"}
                             />
 
                             <LeagueInfo
@@ -205,31 +211,11 @@ export default function LeagueTabs({
                 <section className="league-section">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
                         <h2>Standings</h2>
-                        {availableSeasons && availableSeasons.length > 0 && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <label style={{ color: "var(--muted)", fontSize: "14px", fontWeight: "600" }}>Season:</label>
-                                <select
-                                    value={selectedSeason}
-                                    onChange={(e) => handleSeasonChange(e.target.value)}
-                                    style={{
-                                        background: "var(--surface, #1e293b)",
-                                        color: "var(--text, #fff)",
-                                        border: "1px solid var(--border, #334155)",
-                                        borderRadius: "8px",
-                                        padding: "6px 12px",
-                                        fontSize: "14px",
-                                        fontWeight: "600",
-                                        cursor: "pointer"
-                                    }}
-                                >
-                                    {availableSeasons.map((s) => (
-                                        <option key={s.id || s.year} value={s.year}>
-                                            {s.year.includes('-') ? s.year.replace('-', '/') : s.year}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
+                        <SeasonSelector
+                            availableSeasons={availableSeasons}
+                            selectedSeason={selectedSeason}
+                            onChange={handleSeasonChange}
+                        />
                     </div>
 
                     {standings.length === 0 ? (
@@ -249,9 +235,7 @@ export default function LeagueTabs({
                         {leagueTeams.map((team) => (
                             <Link
                                 key={team.id}
-                                href={`/teams/${team.name
-                                    .toLowerCase()
-                                    .replaceAll(" ", "-")}`}
+                                href={`/teams/${team.id || team.name.toLowerCase().replaceAll(" ", "-")}`}
                                 className="league-team-card"
                             >
                                 {team.logo ? (
@@ -279,15 +263,22 @@ export default function LeagueTabs({
             {/* TOP SCORERS */}
             {activeTab === "scorers" && (
                 <section className="league-section">
-                    <h2>Top Scorers</h2>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                        <h2>Top Scorers</h2>
+                        <SeasonSelector
+                            availableSeasons={availableSeasons}
+                            selectedSeason={selectedSeason}
+                            onChange={handleSeasonChange}
+                        />
+                    </div>
 
                     {topScorers.length === 0 ? (
-                        <p>No goals recorded yet.</p>
+                        <p>No top-scorer data is available for this season.</p>
                     ) : (
                         <div className="top-scorer-list">
                             {topScorers.map((scorer, index) => (
                                 <div
-                                    key={scorer.player}
+                                    key={`${scorer.player}-${scorer.team}`}
                                     className="top-scorer-row"
                                 >
                                     <span className="scorer-position">
@@ -365,6 +356,8 @@ function LeagueInfo({ label, value }) {
 }
 
 function LeagueMatchRow({ match }) {
+    const isUpcoming = ["UPCOMING", "NS", "TBD", "TIMED", "PST"].includes(match.status);
+
     return (
         <Link
             href={`/matches/${match.id}`}
@@ -383,9 +376,14 @@ function LeagueMatchRow({ match }) {
             </span>
 
             <strong>
-                {match.status === "UPCOMING" || match.status === "NS"
-                    ? (match.minute || "VS")
-                    : `${match.homeScore ?? 0} - ${match.awayScore ?? 0}`}
+                {isUpcoming
+                    ? (
+                        <LocalKickoffTime
+                            matchDate={match.matchDate}
+                            status={match.providerStatus || match.status}
+                        />
+                    )
+                    : `${match.homeScore ?? "-"} - ${match.awayScore ?? "-"}`}
             </strong>
 
             <span style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "flex-end" }}>
@@ -429,13 +427,44 @@ function StandingsTable({ standings }) {
                                 onError={(e) => { e.currentTarget.style.display = "none"; }}
                             />
                         )}
-                        <strong>{team.team}</strong>
+                        <span style={{ display: "grid", gap: "1px" }}>
+                            <strong>{team.team}</strong>
+                            {team.group && (
+                                <small style={{ color: "var(--muted)", fontSize: "10px" }}>
+                                    {team.group}
+                                </small>
+                            )}
+                        </span>
                     </span>
                     <span>{team.played}</span>
                     <span>{team.goalDifference > 0 ? `+${team.goalDifference}` : team.goalDifference}</span>
                     <strong>{team.points}</strong>
                 </div>
             ))}
+        </div>
+    );
+}
+
+function SeasonSelector({ availableSeasons, selectedSeason, onChange }) {
+    if (!availableSeasons || availableSeasons.length === 0) return null;
+
+    return (
+        <div className="season-selector">
+            <label htmlFor="league-season-select">
+                Season:
+            </label>
+            <select
+                id="league-season-select"
+                className="season-select"
+                value={selectedSeason}
+                onChange={(event) => onChange(event.target.value)}
+            >
+                {availableSeasons.map((season) => (
+                    <option key={season.id || season.year} value={season.year}>
+                        {season.year.includes("-") ? season.year.replace("-", "/") : season.year}
+                    </option>
+                ))}
+            </select>
         </div>
     );
 }

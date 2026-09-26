@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="glow" cx="0.78" cy="0.18" r="0.72">
+      <stop offset="0" stop-color="#173B2B"/>
+      <stop offset="0.58" stop-color="#0A1610"/>
+      <stop offset="1" stop-color="#050A07"/>
+    </radialGradient>
+  </defs>
+  <path d="M17 3h30c7.7 0 14 6.3 14 14v30c0 7.7-6.3 14-14 14H17C9.3 61 3 54.7 3 47V17C3 9.3 9.3 3 17 3Z" fill="url(#glow)" stroke="#69F5BD" stroke-opacity="0.34" stroke-width="2"/>
+  <g transform="translate(11.4 4) scale(.86)">
+    <path d="M9 13 27 23.4c-4-2.2-7 .2-7 4.5v9L8 30C3.8 27.5 2.4 22 5 17.8A12 12 0 0 1 9 13Z" fill="#E8FFF6"/>
+    <path d="m9 13 11.2-6.6a7.5 7.5 0 0 1 7.6 0L42 14.8a8 8 0 0 1 4 6.9V31Z" fill="#31D99C"/>
+    <path d="m4 32 17 9.8c4.6 2.7 7 .8 7-3.8v-7l16 9.2v10.1a8 8 0 0 1-4 6.9l-12.2 7.1a7.5 7.5 0 0 1-7.6 0L8 57.2a8 8 0 0 1-4-6.9Z" fill="#31D99C"/>
+    <path d="m28 31 12 7a10.7 10.7 0 0 1 4 14.7c-2.7 4.6-8.7 6.1-13.3 3.4L21 50.5c4.5 2.6 7 .5 7-4Z" fill="#E8FFF6"/>
+  </g>
+</svg>

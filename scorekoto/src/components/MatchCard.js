@@ -1,10 +1,10 @@
 import Link from "next/link";
 import TeamBadge from "./TeamBadge";
+import LocalKickoffTime from "./LocalKickoffTime";
 
 export default function MatchCard({ match }) {
   const isLive = match.status === "LIVE";
   const isFinished = match.status === "FT" || match.status === "AET" || match.status === "PEN";
-
   const homeTeam = {
     name: match.homeTeam,
     logo: match.homeLogo,
@@ -22,12 +22,16 @@ export default function MatchCard({ match }) {
       <div className="match-top">
         <span className="match-league">{match.league}</span>
 
-        {isLive && <span className="match-live">🔴 {match.minute}</span>}
+        {isLive && <span className="match-live"><span className="status-live-dot" aria-hidden="true" /> {match.minute}</span>}
 
         {isFinished && <span className="match-finished">FT</span>}
 
         {match.status === "UPCOMING" && (
-          <span className="match-time">{match.minute || "TBD"}</span>
+          <LocalKickoffTime
+            className="match-time"
+            matchDate={match.matchDate}
+            status={match.providerStatus || match.status}
+          />
         )}
       </div>
 

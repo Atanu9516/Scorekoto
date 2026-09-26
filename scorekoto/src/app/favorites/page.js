@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useFavorites } from "@/context/FavoritesContext";
+import Icon from "@/components/Icon";
 
 export default function FavoritesPage() {
   const { user } = useAuth();
@@ -105,7 +106,7 @@ export default function FavoritesPage() {
         }}
       >
         <div>
-          <h1>⭐ Favorites</h1>
+          <h1><Icon name="star" /> Favorites</h1>
           <p>Your followed teams, players, and competitions</p>
         </div>
 
@@ -188,7 +189,7 @@ export default function FavoritesPage() {
           favoritePlayers.map((player) => (
             <Link
               key={player.player_id || player.id}
-              href={`/players/${player.slug || player.player_id || player.id}`}
+              href={`/players/${player.player_id || player.id}`}
               className="favorite-card"
             >
               {player.photo || player.photo_url ? (
@@ -241,11 +242,11 @@ export default function FavoritesPage() {
                   }}
                 />
               ) : (
-                <div className="favorite-card-placeholder">🏆</div>
+                <div className="favorite-card-placeholder"><Icon name="trophy" /></div>
               )}
               <div className="favorite-card-content">
                 <strong>{league.name}</strong>
-                <span>{league.country || "Global Competition"}</span>
+                <span>{league.country || "Country unavailable"}</span>
               </div>
             </Link>
           ))

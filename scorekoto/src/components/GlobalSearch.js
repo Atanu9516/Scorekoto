@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Icon from "./Icon";
 
 export default function GlobalSearch() {
   const [query, setQuery] = useState("");
@@ -62,7 +63,7 @@ export default function GlobalSearch() {
   return (
     <div className="global-search" ref={searchRef}>
       <div className="search-input-wrapper">
-        <span className="search-icon">🔍︎</span>
+        <Icon name="search" className="search-icon" />
         <input
           type="text"
           placeholder="Search teams, players, leagues, matches..."
@@ -80,7 +81,7 @@ export default function GlobalSearch() {
             onClick={clearSearch}
             aria-label="Clear search"
           >
-            ×
+            <Icon name="close" />
           </button>
         )}
       </div>
@@ -88,7 +89,7 @@ export default function GlobalSearch() {
       {isOpen && query.trim().length > 0 && (
         <div className="search-results">
           {isLoading && (
-            <div className="search-empty">Searching Scorekoto database...</div>
+            <div className="search-empty">Searching Scoreকত? database...</div>
           )}
 
           {!isLoading && !hasResults && (
@@ -102,7 +103,7 @@ export default function GlobalSearch() {
               {results.players.map((player) => (
                 <Link
                   key={player.id}
-                  href={`/players/${player.slug || player.id}`}
+                  href={`/players/${player.id}`}
                   className="search-result-item"
                   onClick={clearSearch}
                 >
@@ -110,16 +111,16 @@ export default function GlobalSearch() {
                     {player.photo ? (
                       <img src={player.photo} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
                     ) : (
-                      "🏃"
+                      <Icon name="player" />
                     )}
                   </div>
                   <div className="search-result-details">
                     <strong>{player.name}</strong>
                     <span>
-                      {player.team_name || player.nationality || "Player"} · {player.position || "Footballer"}
+                      {player.team_name || player.nationality || "Details unavailable"} · {player.position || "Position unavailable"}
                     </span>
                   </div>
-                  <span className="search-result-arrow">›</span>
+                  <Icon name="chevronRight" className="search-result-arrow" />
                 </Link>
               ))}
             </SearchSection>
@@ -147,7 +148,7 @@ export default function GlobalSearch() {
                       {team.short_name || "Club"} {team.stadium_name ? `· ${team.stadium_name}` : ""}
                     </span>
                   </div>
-                  <span className="search-result-arrow">›</span>
+                  <Icon name="chevronRight" className="search-result-arrow" />
                 </Link>
               ))}
             </SearchSection>
@@ -166,14 +167,14 @@ export default function GlobalSearch() {
                     {league.logo_url ? (
                       <img src={league.logo_url} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} />
                     ) : (
-                      "🏆"
+                      <Icon name="trophy" />
                     )}
                   </div>
                   <div className="search-result-details">
                     <strong>{league.name}</strong>
-                    <span>{league.country || "International"}</span>
+                    <span>{league.country || "Country unavailable"}</span>
                   </div>
-                  <span className="search-result-arrow">›</span>
+                  <Icon name="chevronRight" className="search-result-arrow" />
                 </Link>
               ))}
             </SearchSection>
@@ -188,7 +189,7 @@ export default function GlobalSearch() {
                   className="search-result-item"
                   onClick={clearSearch}
                 >
-                  <div className="search-result-icon">⚽</div>
+                  <div className="search-result-icon"><Icon name="football" /></div>
                   <div className="search-result-details">
                     <strong>
                       {match.homeTeam} vs {match.awayTeam}
@@ -202,7 +203,7 @@ export default function GlobalSearch() {
                         : match.status || "Upcoming"}
                     </span>
                   </div>
-                  <span className="search-result-arrow">›</span>
+                  <Icon name="chevronRight" className="search-result-arrow" />
                 </Link>
               ))}
             </SearchSection>
